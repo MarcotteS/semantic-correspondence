@@ -1,9 +1,9 @@
+import torch
 import os
 import sys
 import glob
 from tqdm import tqdm
 import random
-import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
@@ -132,7 +132,7 @@ def make_optimizer(model, lr=2e-5, weight_decay=0.01):
         raise ValueError("Aucun paramètre entraînable. Vérifie unfreeze_last_blocks_dino().")
     return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
-
+@staticmethod
 def train_stage2(
     matcher,
     train_loader,
