@@ -530,3 +530,47 @@ class ResultsAnalyzer:
         self.export_to_csv(save_dir=save_dir)
 
         print(f"✅ Report generated in {save_dir}/")
+def evaluate_model(matcher, dataloader):
+    """
+    Evaluate correspondence matcher on a dataset.
+    """
+    evaluator = CorrespondenceEvaluator(thresholds=[0.05, 0.10, 0.15, 0.20])
+    matcher.extractor.model.eval()
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Evaluating"):
+            src_img = batch['src_img']      # [B, 3, H, W]
+            trg_img = batch['trg_img']      # [B, 3, H, W]
+            src_kps = batch['src_kps']      # [B, N, 2]
+
+            # Find correspondences (batched)
+            pred_kps = matcher.find_correspondences(src_img, trg_img, src_kps)  # [B, N, 2]
+
+            # Process each sample in batch
+            batch_size = src_img.shape[0]
+            for b in range(batch_size):
+                # Extract single sample
+                pred_kps_b = pred_kps[b]
+                trg_kps_b = batch['trg_kps'][b]
+                n_pts_b = batch['n_pts'][b]
+                pckthres_b = batch['pckthres'][b]
+                kps_ids_b = batch['kps_ids'][b]
+                pair_idx_b = batch['pair_idx'][b]
+                category_b = batch['category'][b]
+
+                # Prepare batch dict for evaluator
+                batch_single = {
+                    'trg_kps': trg_kps_b,
+                    'pckthres': pckthres_b,
+                    'n_pts': n_pts_b,
+                    'kps_ids': kps_ids_b,
+                    'pair_idx': pair_idx_b,
+                    'category': category_b,
+                }
+
+                evaluator.update(pred_kps_b, batch_single)
+
+    metrics = evaluator.get_metrics()
+    evaluator.print_summary(metrics)
+
+    return metrics
