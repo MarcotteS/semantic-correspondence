@@ -132,86 +132,77 @@ def make_optimizer(model, lr=2e-5, weight_decay=0.01):
         raise ValueError("Aucun paramètre entraînable. Vérifie unfreeze_last_blocks_dino().")
     return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
-@staticmethod
 def train_stage2(
     matcher,
     train_loader,
-    n_epochs=1,
-    n_last_blocks=1,
+    n_epochs=5,
     lr=2e-5,
-    weight_decay=0.01,
-    tau=0.07,
-    max_batches_per_epoch=None,
-    use_amp=True,
+    ckpt_dir=None,
 ):
-    """
-    Fine-tuning étape 2 avec ta fonction matcher.find_correspondences() + correspondence_loss_ce().
-    """
     model = matcher.extractor.model
+    optimizer = make_optimizer(model, lr=lr)
 
-    # 1) Unfreeze last layers
-    unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
+    start_epoch = 0
+    ckpt_path = None
 
-    # 2) Optimizer
-    optimizer = make_optimizer(model, lr=lr, weight_decay=weight_decay)
+    if ckpt_dir is not None:
+        ckpt_path = os.path.join(ckpt_dir, "last.pt")
+        if os.path.exists(ckpt_path):
+            start_epoch = load_checkpoint(ckpt_path, model, optimizer) + 1
+            print("Reprise depuis epoch", start_epoch)
 
-    # 3) Train mode
     model.train()
 
-    scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and torch.cuda.is_available()))
-    patch_size = matcher.extractor.patch_size
-    print("nb trainable params:", sum(p.requires_grad for p in model.parameters()))
-    for epoch in range(n_epochs):
+    for epoch in range(start_epoch, n_epochs):
         running = 0.0
-        steps = 0
 
-        pbar = tqdm(train_loader, desc=f"Stage2 epoch {epoch+1}/{n_epochs}")
-        for i, batch in enumerate(pbar):
-            if max_batches_per_epoch is not None and i >= max_batches_per_epoch:
-                break
-
+        for batch in train_loader:
             src_img = batch["src_img"]
             trg_img = batch["trg_img"]
             src_kps = batch["src_kps"]
             trg_kps = batch["trg_kps"]
 
-            optimizer.zero_grad(set_to_none=True)
+            optimizer.zero_grad()
 
-            if scaler.is_enabled():
-                with torch.cuda.amp.autocast():
-                    sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(src_img, trg_img, src_kps)
-                    loss = correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_mask, tau=tau)
-                if loss is None:
-                    continue
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(src_img, trg_img, src_kps)
-                loss = correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_mask, tau=tau)
-                if i == 0:  # juste au 1er batch
-                     print("cuda available:", torch.cuda.is_available())
-                     print("matcher.device:", matcher.device)
+            sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(
+                src_img, trg_img, src_kps
+            )
 
-                     # est-ce qu'il y a des params entraînables ?
-                     model = matcher.extractor.model
-                     print("trainable params:", sum(p.requires_grad for p in model.parameters()))
+            loss = correspondence_loss_ce(
+                sim_matrix, trg_kps,
+                matcher.extractor.patch_size,
+                h_p, w_p,
+                valid_mask
+            )
 
-                     # est-ce que le forward est différentiable ?
-                     print("sim_matrix.requires_grad:", sim_matrix.requires_grad)
-                     print("loss.requires_grad:", loss.requires_grad)
+            if loss is None:
+                continue
 
-                if loss is None:
-                    continue
-                loss.backward()
-                optimizer.step()
+            loss.backward()
+            optimizer.step()
 
             running += float(loss.item())
-            steps += 1
-            pbar.set_postfix(loss=running / max(1, steps))
 
-        print(f"Epoch {epoch+1}: avg loss = {running / max(1, steps):.6f}")
+        print(f"Epoch {epoch+1} - loss {running:.4f}")
 
-    return matcher  # le matcher contient le modèle mis à jour
+        if ckpt_path is not None:
+            save_checkpoint(ckpt_path, model, optimizer, epoch)
+            print("Checkpoint sauvegardé")
+
+    return matcher
+
+def save_checkpoint(path, model, optimizer, epoch):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save({
+        "epoch": epoch,
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+    }, path)
+
+def load_checkpoint(path, model, optimizer):
+    ckpt = torch.load(path, map_location="cpu")
+    model.load_state_dict(ckpt["model"])
+    optimizer.load_state_dict(ckpt["optimizer"])
+    return ckpt["epoch"]
 
 
