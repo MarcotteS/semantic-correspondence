@@ -1,33 +1,29 @@
 import torch
 
 
+
 class DINOv2Extractor:
     def __init__(self, model_name="dinov2_vitb14"):
-        """Initialize DINOv2 feature extractor."""
         self.model = torch.hub.load("facebookresearch/dinov2", model_name)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
-        self.model.eval()
         self.patch_size = self.model.patch_size
 
-    @torch.no_grad()
-    def extract(self, img: torch.Tensor):
+    def extract(self, img: torch.Tensor, no_grad: bool = True):
         """
         Extract features from image(s).
 
         Args:
-            img: torch.Tensor of shape:
-                - [3, H, W] for single image
-                - [B, 3, H, W] for batch of images
-                All images must have the same H, W (already resized/normalized)
+            img: [3,H,W] or [B,3,H,W]
+            no_grad: True for inference/eval, False for fine-tuning (keeps gradients)
 
         Returns:
-            features: torch.Tensor [B, H_p*W_p, D] - patch token features
-            spatial_dims: tuple (H_p, W_p) - spatial patch grid size
+            features: [B, H_p*W_p, D]
+            (H_p, W_p)
         """
         # Ensure batch dimension
         if img.dim() == 3:
-            img = img.unsqueeze(0)  # [1, 3, H, W]
+            img = img.unsqueeze(0)
 
         assert img.dim() == 4, f"Expected 4D tensor, got {img.dim()}D"
         B, C, H, W = img.shape
@@ -35,10 +31,15 @@ class DINOv2Extractor:
 
         img = img.to(self.device)
 
-        # Forward pass
-        out = self.model.forward_features(img)
+        # mode: en training loop tu gères model.train(), sinon eval
+        if no_grad:
+            self.model.eval()
+            with torch.no_grad():
+                out = self.model.forward_features(img)
+        else:
+            # IMPORTANT: pas de no_grad ici
+            out = self.model.forward_features(img)
 
-        # Extract patch tokens (shape: [B, H_p*W_p, D])
         features = out["x_norm_patchtokens"]
 
         H_p = H // self.patch_size
