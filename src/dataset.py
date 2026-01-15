@@ -326,3 +326,106 @@ def collate_fn_correspondence(batch):
         'src_imsize': src_imsizes,
         'trg_imsize': trg_imsizes,
     }
+# functions for visualising samples with keypoints
+def denorm(img_chw, mean=(0.485,0.456,0.406), std=(0.229,0.224,0.225)):
+    mean = torch.tensor(mean)[:, None, None]
+    std  = torch.tensor(std)[:, None, None]
+    x = img_chw.cpu() * std + mean
+    return x.clamp(0, 1)
+
+def draw_image_with_keypoints(
+    ax,
+    image,
+    keypoints,
+    title=None,
+    colors=None,
+    kp_size=35,
+    show_indices=True,
+    fontsize=9
+):
+    ax.imshow(image)
+    if title is not None:
+        ax.set_title(title)
+    ax.axis("off")
+
+    n = keypoints.shape[0]
+
+    for i in range(n):
+        c = colors[i] if colors is not None else None
+
+        ax.scatter(
+            keypoints[i, 0],
+            keypoints[i, 1],
+            s=kp_size,
+            color=c
+        )
+
+        if show_indices:
+            ax.text(
+                keypoints[i, 0] + 2,
+                keypoints[i, 1] + 2,
+                str(i),
+                fontsize=fontsize,
+                color="white",
+                bbox=dict(
+                    facecolor="black",
+                    alpha=0.5,
+                    pad=1,
+                    edgecolor="none"
+                ),
+            )
+
+
+def visualize_sample(
+    ds,
+    idx=None,
+    kp_size=35,
+    show_indices=True,
+    use_colors=True,
+    fontsize=9
+):
+    if idx is None:
+        idx = random.randrange(len(ds))
+
+    b = ds[idx]
+    n = int(b["n_pts"].item())
+
+    src = denorm(b["src_img"]).permute(1, 2, 0).numpy()
+    trg = denorm(b["trg_img"]).permute(1, 2, 0).numpy()
+
+    src_kps = b["src_kps"][:n].cpu()
+    trg_kps = b["trg_kps"][:n].cpu()
+
+    # Same color per keypoint index across both images
+    if use_colors:
+        cmap = plt.get_cmap("tab20")
+        colors = [cmap(i % 20) for i in range(n)]
+    else:
+        colors = None
+
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+    draw_image_with_keypoints(
+        ax[0],
+        src,
+        src_kps,
+        title=f"SRC ({b['category']}) idx={idx}",
+        colors=colors,
+        kp_size=kp_size,
+        show_indices=show_indices,
+        fontsize=fontsize,
+    )
+
+    draw_image_with_keypoints(
+        ax[1],
+        trg,
+        trg_kps,
+        title="TRG",
+        colors=colors,
+        kp_size=kp_size,
+        show_indices=show_indices,
+        fontsize=fontsize,
+    )
+
+    plt.tight_layout()
+    plt.show()
