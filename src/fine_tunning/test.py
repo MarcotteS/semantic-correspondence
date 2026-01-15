@@ -135,61 +135,158 @@ def make_optimizer(model, lr=2e-5, weight_decay=0.01):
 def train_stage2(
     matcher,
     train_loader,
-    n_epochs=5,
+    n_epochs=1,
+    n_last_blocks=1,
     lr=2e-5,
-    ckpt_dir=None,
+    weight_decay=0.01,
+    tau=0.07,
+    max_batches_per_epoch=None,
+    use_amp=True,
 ):
+    """
+    Fine-tuning étape 2 avec matcher.find_correspondences() + correspondence_loss_ce()
+    + checkpointing simple (auto resume) sur Google Drive.
+
+    IMPORTANT:
+    - Pour activer les checkpoints sans changer la signature, définis sur ton matcher:
+        matcher.ckpt_dir = "/content/drive/MyDrive/semantic-correspondance-project/checkpoints"
+        matcher.exp_name = "stage2_exp01"   # optionnel
+        matcher.resume = True              # optionnel (par défaut True)
+        matcher.save_every_epoch = 1       # optionnel (par défaut 1)
+    """
+    import os
+    import torch
+    from tqdm import tqdm
+
+    # --- helpers checkpoint (internes, pas besoin de les importer ailleurs) ---
+    def _ckpt_path():
+        ckpt_dir = getattr(matcher, "ckpt_dir", None)
+        if not ckpt_dir:
+            return None
+        exp_name = getattr(matcher, "exp_name", "stage2")
+        return os.path.join(ckpt_dir, exp_name, "last.pt")
+
+    def _save_ckpt(path, model, optimizer, scaler, epoch, step):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        payload = {
+            "epoch": epoch,
+            "step": step,
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "scaler": (scaler.state_dict() if (scaler is not None and scaler.is_enabled()) else None),
+            "meta": {
+                "lr": lr,
+                "weight_decay": weight_decay,
+                "tau": tau,
+                "n_last_blocks": n_last_blocks,
+            },
+        }
+        torch.save(payload, path)
+
+    def _load_ckpt(path, model, optimizer, scaler):
+        ckpt = torch.load(path, map_location=matcher.device)
+        model.load_state_dict(ckpt["model"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+        if scaler is not None and scaler.is_enabled() and ckpt.get("scaler") is not None:
+            scaler.load_state_dict(ckpt["scaler"])
+        return int(ckpt.get("epoch", 0)), int(ckpt.get("step", 0))
+
+    # 0) Model
     model = matcher.extractor.model
-    optimizer = make_optimizer(model, lr=lr)
 
-    start_epoch = 0
-    ckpt_path = None
+    # 1) Unfreeze last layers
+    unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
 
-    if ckpt_dir is not None:
-        ckpt_path = os.path.join(ckpt_dir, "last.pt")
-        if os.path.exists(ckpt_path):
-            start_epoch = load_checkpoint(ckpt_path, model, optimizer) + 1
-            print("Reprise depuis epoch", start_epoch)
+    # 2) Optimizer
+    optimizer = make_optimizer(model, lr=lr, weight_decay=weight_decay)
 
+    # 3) Train mode
     model.train()
 
-    for epoch in range(start_epoch, n_epochs):
-        running = 0.0
+    scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and torch.cuda.is_available()))
+    patch_size = matcher.extractor.patch_size
 
-        for batch in train_loader:
+    # Affichage correct du nb de params entraînables
+    nb_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print("nb trainable params:", nb_trainable)
+
+    # --- Resume si checkpoint activé via matcher.ckpt_dir ---
+    start_epoch_offset = 0
+    global_step = 0
+    ckpt_file = _ckpt_path()
+    do_resume = getattr(matcher, "resume", True)
+
+    if ckpt_file is not None and do_resume and os.path.exists(ckpt_file):
+        last_epoch, global_step = _load_ckpt(ckpt_file, model, optimizer, scaler)
+        start_epoch_offset = last_epoch + 1
+        print(f"[ckpt] reprise depuis epoch={start_epoch_offset} step={global_step} ({ckpt_file})")
+    elif ckpt_file is not None:
+        os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
+        print(f"[ckpt] pas de checkpoint -> from scratch ({ckpt_file})")
+
+    save_every_epoch = int(getattr(matcher, "save_every_epoch", 1))
+
+    # Training
+    for epoch in range(start_epoch_offset, start_epoch_offset + n_epochs):
+        running = 0.0
+        steps = 0
+
+        pbar = tqdm(train_loader, desc=f"Stage2 epoch {epoch+1}/{start_epoch_offset + n_epochs}")
+        for i, batch in enumerate(pbar):
+            if max_batches_per_epoch is not None and i >= max_batches_per_epoch:
+                break
+
             src_img = batch["src_img"]
             trg_img = batch["trg_img"]
             src_kps = batch["src_kps"]
             trg_kps = batch["trg_kps"]
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
-            sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(
-                src_img, trg_img, src_kps
-            )
+            if scaler.is_enabled():
+                # Nouveau autocast recommandé (compatible PyTorch récent)
+                with torch.amp.autocast("cuda"):
+                    sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(src_img, trg_img, src_kps)
+                    loss = correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_mask, tau=tau)
 
-            loss = correspondence_loss_ce(
-                sim_matrix, trg_kps,
-                matcher.extractor.patch_size,
-                h_p, w_p,
-                valid_mask
-            )
+                if loss is None:
+                    continue
 
-            if loss is None:
-                continue
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(src_img, trg_img, src_kps)
+                loss = correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_mask, tau=tau)
 
-            loss.backward()
-            optimizer.step()
+                if i == 0:  # debug 1er batch
+                    print("cuda available:", torch.cuda.is_available())
+                    print("matcher.device:", matcher.device)
+                    print("trainable params:", nb_trainable)
+                    print("sim_matrix.requires_grad:", sim_matrix.requires_grad)
+                    print("loss.requires_grad:", loss.requires_grad)
+
+                if loss is None:
+                    continue
+
+                loss.backward()
+                optimizer.step()
 
             running += float(loss.item())
+            steps += 1
+            global_step += 1
+            pbar.set_postfix(loss=running / max(1, steps))
 
-        print(f"Epoch {epoch+1} - loss {running:.4f}")
+        avg = running / max(1, steps)
+        print(f"Epoch {epoch+1}: avg loss = {avg:.6f}")
 
-        if ckpt_path is not None:
-            save_checkpoint(ckpt_path, model, optimizer, epoch)
-            print("Checkpoint sauvegardé")
+        # --- Save checkpoint fin d'epoch ---
+        if ckpt_file is not None and save_every_epoch > 0 and ((epoch + 1) % save_every_epoch == 0):
+            _save_ckpt(ckpt_file, model, optimizer, scaler, epoch, global_step)
+            print(f"[ckpt] sauvegardé: {ckpt_file}")
 
-    return matcher
+    return matcher  # le matcher contient le modèle mis à jour
+
 
 def save_checkpoint(path, model, optimizer, epoch):
     os.makedirs(os.path.dirname(path), exist_ok=True)
