@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 class ResultsAnalyzer:
     """
     Analyze and visualize correspondence evaluation results
