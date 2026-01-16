@@ -148,6 +148,8 @@ def train_stage2(
     from tqdm import tqdm
     import matplotlib.pyplot as plt
     from IPython.display import clear_output
+    import time as pytime
+
 
     loss_history = []
     step_history = []
@@ -158,7 +160,7 @@ def train_stage2(
     ax.set_xlabel("step")
     ax.set_ylabel("loss")
     ax.set_title("Training loss (live)")
-    last_plot_time = time.time()
+    last_plot_time = pytime.time()
 
     def _ckpt_path():
         ckpt_dir = getattr(matcher, "ckpt_dir", None)
@@ -275,7 +277,7 @@ def train_stage2(
             step_history.append(global_step)
 
 # update toutes les 10 secondes
-            if time.time() - last_plot_time > 10:
+            if pytime.time() - last_plot_time > 10:
                 line.set_xdata(step_history)
                 line.set_ydata(loss_history)
                 ax.relim()
@@ -284,7 +286,7 @@ def train_stage2(
                 clear_output(wait=True)
                 display(fig)
 
-                last_plot_time = time.time()
+                last_plot_time = pytime.time()
 
 
             pbar.set_postfix(loss=running / max(1, steps))
