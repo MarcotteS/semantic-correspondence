@@ -227,50 +227,132 @@ class CorrespondenceEvaluator:
         print("\n" + "="*70)
 
 
-def evaluate_model(matcher, dataloader):
+import os
+import json
+import torch
+from tqdm import tqdm
+
+def evaluate_model(
+    matcher,
+    dataloader,
+    thresholds=(0.05, 0.10, 0.15, 0.20),
+    save_dir=None,
+    run_name=None,
+    force_recalculation=False,
+):
     """
-    Evaluate correspondence matcher on a dataset.
+    Evaluate correspondence matcher on a dataset, with Drive caching.
+
+    - Sauvegarde les metrics en JSON.
+    - Si le JSON existe déjà (même run_name), on recharge et on ne recalcule pas,
+      sauf si force_recalculation=True.
+
+    Naming:
+      - run_name par défaut: matcher.exp_name si existe sinon "model"
+      - save_dir par défaut:
+          si matcher.ckpt_dir existe -> <ckpt_dir>/<exp_name>/metrics
+          sinon -> "./results/metrics"
     """
-    evaluator = CorrespondenceEvaluator(thresholds=[0.05, 0.10, 0.15, 0.20])
+    from datetime import datetime
+
+    # ----------------- helpers -----------------
+    def _default_save_dir():
+        ckpt_dir = getattr(matcher, "ckpt_dir", None)
+        exp_name = getattr(matcher, "exp_name", "stage2")
+        if ckpt_dir:
+            return os.path.join(ckpt_dir, exp_name, "metrics")
+        return "./results/metrics"
+
+    def _to_jsonable(x):
+        # Convert nested structures + tensors to pure python
+        if isinstance(x, torch.Tensor):
+            return x.detach().cpu().tolist()
+        if isinstance(x, (float, int, str, bool)) or x is None:
+            return x
+        if isinstance(x, dict):
+            return {str(k): _to_jsonable(v) for k, v in x.items()}
+        if isinstance(x, (list, tuple)):
+            return [_to_jsonable(v) for v in x]
+        # fallback (e.g. numpy types)
+        try:
+            import numpy as np
+            if isinstance(x, (np.integer, np.floating)):
+                return x.item()
+            if isinstance(x, np.ndarray):
+                return x.tolist()
+        except Exception:
+            pass
+        return str(x)
+
+    # ----------------- paths -----------------
+    save_dir = save_dir or _default_save_dir()
+    os.makedirs(save_dir, exist_ok=True)
+
+    exp_name = getattr(matcher, "exp_name", "model")
+    run_name = run_name or exp_name
+
+    # one file per run_name + thresholds signature
+    th_str = "-".join([f"{t:.2f}" for t in thresholds])
+    metrics_path = os.path.join(save_dir, f"metrics_{run_name}_th_{th_str}.json")
+
+    # ----------------- cache load -----------------
+    if (not force_recalculation) and os.path.exists(metrics_path):
+        with open(metrics_path, "r") as f:
+            payload = json.load(f)
+        metrics = payload.get("metrics", payload)  # allow old format
+        print(f"✅ Loaded cached metrics: {metrics_path}")
+        return metrics
+
+    # ----------------- compute -----------------
+    evaluator = CorrespondenceEvaluator(thresholds=list(thresholds))
     matcher.extractor.model.eval()
 
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Evaluating"):
-            src_img = batch['src_img']      # [B, 3, H, W]
-            trg_img = batch['trg_img']      # [B, 3, H, W]
-            src_kps = batch['src_kps']      # [B, N, 2]
+            src_img = batch["src_img"]      # [B, 3, H, W]
+            trg_img = batch["trg_img"]      # [B, 3, H, W]
+            src_kps = batch["src_kps"]      # [B, N, 2]
 
             # Find correspondences (batched)
-            pred_kps = matcher.find_correspondences(src_img, trg_img, src_kps)  # [B, N, 2]
+            pred_kps = matcher.find_correspondences(src_img, trg_img, src_kps)  # [B, N, 2] (ou ce que renvoie ton matcher)
 
-            # Process each sample in batch
             batch_size = src_img.shape[0]
             for b in range(batch_size):
-                # Extract single sample
                 pred_kps_b = pred_kps[b]
-                trg_kps_b = batch['trg_kps'][b]
-                n_pts_b = batch['n_pts'][b]
-                pckthres_b = batch['pckthres'][b]
-                kps_ids_b = batch['kps_ids'][b]
-                pair_idx_b = batch['pair_idx'][b]
-                category_b = batch['category'][b]
+                trg_kps_b = batch["trg_kps"][b]
+                n_pts_b = batch["n_pts"][b]
+                pckthres_b = batch["pckthres"][b]
+                kps_ids_b = batch["kps_ids"][b]
+                pair_idx_b = batch["pair_idx"][b]
+                category_b = batch["category"][b]
 
-                # Prepare batch dict for evaluator
                 batch_single = {
-                    'trg_kps': trg_kps_b,
-                    'pckthres': pckthres_b,
-                    'n_pts': n_pts_b,
-                    'kps_ids': kps_ids_b,
-                    'pair_idx': pair_idx_b,
-                    'category': category_b,
+                    "trg_kps": trg_kps_b,
+                    "pckthres": pckthres_b,
+                    "n_pts": n_pts_b,
+                    "kps_ids": kps_ids_b,
+                    "pair_idx": pair_idx_b,
+                    "category": category_b,
                 }
-
                 evaluator.update(pred_kps_b, batch_single)
 
     metrics = evaluator.get_metrics()
     evaluator.print_summary(metrics)
 
+    # ----------------- save -----------------
+    payload = {
+        "run_name": run_name,
+        "exp_name": exp_name,
+        "thresholds": list(thresholds),
+        "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "metrics": _to_jsonable(metrics),
+    }
+    with open(metrics_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"✅ Saved metrics: {metrics_path}")
+
     return metrics
+
 
 
 class ResultsAnalyzer:
