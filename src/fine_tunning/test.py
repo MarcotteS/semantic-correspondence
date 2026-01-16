@@ -135,7 +135,7 @@ def make_optimizer(model, lr=2e-5, weight_decay=0.01):
 def train_stage2(
     matcher,
     train_loader,
-    n_epochs=1,
+    n_epochs=1,              # <-- TOTAL epochs à atteindre
     n_last_blocks=1,
     lr=2e-5,
     weight_decay=0.01,
@@ -143,22 +143,10 @@ def train_stage2(
     max_batches_per_epoch=None,
     use_amp=True,
 ):
-    """
-    Fine-tuning étape 2 avec matcher.find_correspondences() + correspondence_loss_ce()
-    + checkpointing simple (auto resume) sur Google Drive.
-
-    IMPORTANT:
-    - Pour activer les checkpoints sans changer la signature, définis sur ton matcher:
-        matcher.ckpt_dir = "/content/drive/MyDrive/semantic-correspondance-project/checkpoints"
-        matcher.exp_name = "stage2_exp01"   # optionnel
-        matcher.resume = True              # optionnel (par défaut True)
-        matcher.save_every_epoch = 1       # optionnel (par défaut 1)
-    """
     import os
     import torch
     from tqdm import tqdm
 
-    # --- helpers checkpoint (internes, pas besoin de les importer ailleurs) ---
     def _ckpt_path():
         ckpt_dir = getattr(matcher, "ckpt_dir", None)
         if not ckpt_dir:
@@ -169,7 +157,7 @@ def train_stage2(
     def _save_ckpt(path, model, optimizer, scaler, epoch, step):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         payload = {
-            "epoch": epoch,
+            "epoch": epoch,  # 0-based
             "step": step,
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -206,32 +194,39 @@ def train_stage2(
     scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and torch.cuda.is_available()))
     patch_size = matcher.extractor.patch_size
 
-    # Affichage correct du nb de params entraînables
     nb_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("nb trainable params:", nb_trainable)
 
-    # --- Resume si checkpoint activé via matcher.ckpt_dir ---
-    start_epoch_offset = 0
-    global_step = 0
     ckpt_file = _ckpt_path()
     do_resume = getattr(matcher, "resume", True)
+    save_every_epoch = int(getattr(matcher, "save_every_epoch", 1))
 
+    start_epoch_offset = 0
+    global_step = 0
+
+    # ---- RESUME / EARLY EXIT ----
     if ckpt_file is not None and do_resume and os.path.exists(ckpt_file):
         last_epoch, global_step = _load_ckpt(ckpt_file, model, optimizer, scaler)
-        start_epoch_offset = last_epoch + 1
-        print(f"[ckpt] reprise depuis epoch={start_epoch_offset} step={global_step} ({ckpt_file})")
+        completed = last_epoch + 1  # epochs déjà faites (car epoch est 0-based)
+        print(f"[ckpt] chargé: epoch={completed} step={global_step} ({ckpt_file})")
+
+        # Si on a déjà atteint (ou dépassé) n_epochs total -> on ne fait rien
+        if completed >= n_epochs:
+            print(f"[ckpt] déjà à {completed} epochs (objectif={n_epochs}) -> skip training")
+            return matcher
+
+        start_epoch_offset = completed  # reprendre au prochain epoch
+        print(f"[ckpt] reprise à epoch={start_epoch_offset+1}/{n_epochs}")
     elif ckpt_file is not None:
         os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
         print(f"[ckpt] pas de checkpoint -> from scratch ({ckpt_file})")
 
-    save_every_epoch = int(getattr(matcher, "save_every_epoch", 1))
-
-    # Training
-    for epoch in range(start_epoch_offset, start_epoch_offset + n_epochs):
+    # ---- TRAIN UNIQUEMENT LES EPOCHS MANQUANTES ----
+    for epoch in range(start_epoch_offset, n_epochs):
         running = 0.0
         steps = 0
 
-        pbar = tqdm(train_loader, desc=f"Stage2 epoch {epoch+1}/{start_epoch_offset + n_epochs}")
+        pbar = tqdm(train_loader, desc=f"Stage2 epoch {epoch+1}/{n_epochs}")
         for i, batch in enumerate(pbar):
             if max_batches_per_epoch is not None and i >= max_batches_per_epoch:
                 break
@@ -244,31 +239,19 @@ def train_stage2(
             optimizer.zero_grad(set_to_none=True)
 
             if scaler.is_enabled():
-                # Nouveau autocast recommandé (compatible PyTorch récent)
                 with torch.amp.autocast("cuda"):
                     sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(src_img, trg_img, src_kps)
                     loss = correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_mask, tau=tau)
-
                 if loss is None:
                     continue
-
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 sim_matrix, (h_p, w_p), valid_mask = matcher.find_correspondences(src_img, trg_img, src_kps)
                 loss = correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_mask, tau=tau)
-
-                if i == 0:  # debug 1er batch
-                    print("cuda available:", torch.cuda.is_available())
-                    print("matcher.device:", matcher.device)
-                    print("trainable params:", nb_trainable)
-                    print("sim_matrix.requires_grad:", sim_matrix.requires_grad)
-                    print("loss.requires_grad:", loss.requires_grad)
-
                 if loss is None:
                     continue
-
                 loss.backward()
                 optimizer.step()
 
@@ -280,12 +263,11 @@ def train_stage2(
         avg = running / max(1, steps)
         print(f"Epoch {epoch+1}: avg loss = {avg:.6f}")
 
-        # --- Save checkpoint fin d'epoch ---
         if ckpt_file is not None and save_every_epoch > 0 and ((epoch + 1) % save_every_epoch == 0):
             _save_ckpt(ckpt_file, model, optimizer, scaler, epoch, global_step)
             print(f"[ckpt] sauvegardé: {ckpt_file}")
 
-    return matcher  # le matcher contient le modèle mis à jour
+    return matcher
 
 
 def save_checkpoint(path, model, optimizer, epoch):
