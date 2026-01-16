@@ -146,6 +146,19 @@ def train_stage2(
     import os
     import torch
     from tqdm import tqdm
+    import matplotlib.pyplot as plt
+    from IPython.display import clear_output
+
+    loss_history = []
+    step_history = []
+
+    plt.ion()   # mode interactif
+    fig, ax = plt.subplots()
+    line, = ax.plot([], [])
+    ax.set_xlabel("step")
+    ax.set_ylabel("loss")
+    ax.set_title("Training loss (live)")
+
 
     def _ckpt_path():
         ckpt_dir = getattr(matcher, "ckpt_dir", None)
@@ -258,6 +271,22 @@ def train_stage2(
             running += float(loss.item())
             steps += 1
             global_step += 1
+            loss_history.append(float(loss.item()))
+            step_history.append(global_step)
+
+            # update plot toutes les 5 itérations (évite de ralentir)
+            if global_step % 5 == 0:
+                line.set_xdata(step_history)
+                line.set_ydata(loss_history)
+                ax.relim()
+                ax.autoscale_view()
+
+                clear_output(wait=True)
+                display(fig)
+
+            clear_output(wait=True)
+            display(fig)
+
             pbar.set_postfix(loss=running / max(1, steps))
 
         avg = running / max(1, steps)
@@ -285,3 +314,20 @@ def load_checkpoint(path, model, optimizer):
     return ckpt["epoch"]
 
 
+def plot_loss_steps(step_history, loss_history, smooth=50):
+    steps = np.array(step_history)
+    losses = np.array(loss_history)
+
+    plt.figure()
+    plt.plot(steps, losses, label="batch loss")
+
+    if smooth and smooth > 1:
+        kernel = np.ones(smooth) / smooth
+        smoothed = np.convolve(losses, kernel, mode="valid")
+        plt.plot(steps[smooth-1:], smoothed, label=f"moving avg ({smooth})")
+
+    plt.xlabel("global step")
+    plt.ylabel("loss")
+    plt.title("Loss per mini-batch")
+    plt.legend()
+    plt.show()
