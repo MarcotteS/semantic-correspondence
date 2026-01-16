@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 class ResultsAnalyzer:
     """
     Analyze and visualize correspondence evaluation results
