@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional
 import torchvision.transforms as transforms
 from collections import defaultdict
 import pickle
-from datetime import datetime
+from datetime import datetime, time
 import pandas as pd
 class CorrespondenceMatcher2:
     def __init__(self, feature_extractor):
@@ -158,7 +158,7 @@ def train_stage2(
     ax.set_xlabel("step")
     ax.set_ylabel("loss")
     ax.set_title("Training loss (live)")
-
+    last_plot_time = time.time()
 
     def _ckpt_path():
         ckpt_dir = getattr(matcher, "ckpt_dir", None)
@@ -274,8 +274,8 @@ def train_stage2(
             loss_history.append(float(loss.item()))
             step_history.append(global_step)
 
-            # update plot toutes les 5 itérations (évite de ralentir)
-            if global_step % 5 == 0:
+# update toutes les 10 secondes
+            if time.time() - last_plot_time > 10:
                 line.set_xdata(step_history)
                 line.set_ydata(loss_history)
                 ax.relim()
@@ -284,8 +284,8 @@ def train_stage2(
                 clear_output(wait=True)
                 display(fig)
 
-            clear_output(wait=True)
-            display(fig)
+                last_plot_time = time.time()
+
 
             pbar.set_postfix(loss=running / max(1, steps))
 
