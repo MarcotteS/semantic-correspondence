@@ -1,7 +1,6 @@
 import torch
 
 
-
 class DINOv2Extractor:
     def __init__(self, model_name="dinov2_vitb14"):
         self.model = torch.hub.load("facebookresearch/dinov2", model_name)
@@ -95,13 +94,15 @@ class DINOv3Extractor:
         return features, (H_p, W_p)
 
 class SAMExtractor:
-    def __init__(self, model_type="vit_b", checkpoint_path="sam_vit_b_01ec64.pth"):
+    def __init__(self, model_type="vit_b", checkpoint_path="sam_vit_b_01ec64.pth", image_size=512):
         """
         Initialize SAM (Segment Anything Model) feature extractor.
 
         Args:
             model_type: SAM model type ('vit_b', 'vit_l', 'vit_h')
             checkpoint_path: Path to SAM checkpoint file
+            image_size: Target image size (default: 512). Will interpolate positional embeddings
+                       from the pretrained 1024x1024 model to match this size.
         """
         from segment_anything import sam_model_registry
 
@@ -113,7 +114,53 @@ class SAMExtractor:
         # SAM's image encoder outputs 64x64 patches for 1024x1024 input
         # So patch_size = 1024 / 64 = 16
         self.patch_size = 16
-        self.required_size = 1024
+        self.original_size = 1024
+        self.image_size = image_size
+        
+        # Interpolate positional embeddings if using a different image size
+        if self.image_size != self.original_size:
+            self._interpolate_pos_embed()
+
+    def _interpolate_pos_embed(self):
+        """
+        Interpolate positional embeddings to match the target image size.
+        SAM's positional embeddings are for 64x64 patches (1024x1024 image).
+        For 512x512 images, we need 32x32 patches.
+        """
+        
+        # Get the positional embedding from SAM's image encoder
+        # Shape: [1, H, W, D]
+        pos_embed = self.model.image_encoder.pos_embed
+        
+        # Original grid size (64x64 for 1024x1024 images)
+        original_grid_size = self.original_size // self.patch_size
+        
+        # New grid size (e.g., 32x32 for 512x512 images)
+        new_grid_size = self.image_size // self.patch_size
+        
+        if original_grid_size == new_grid_size:
+            return  # No interpolation needed
+        
+        # pos_embed shape: [1, H, W, D]
+        # Permute to [1, D, H, W] for interpolation
+        embed_dim = pos_embed.shape[-1]
+        pos_embed_reshaped = pos_embed.permute(0, 3, 1, 2)  # [1, D, H, W]
+        
+        # Interpolate using bicubic interpolation
+        pos_embed_interpolated = F.interpolate(
+            pos_embed_reshaped,
+            size=(new_grid_size, new_grid_size),
+            mode='bilinear',
+            align_corners=False
+        )
+        
+        # Permute back to [1, H, W, D]
+        pos_embed_interpolated = pos_embed_interpolated.permute(0, 2, 3, 1)
+        
+        # Update the positional embedding
+        self.model.image_encoder.pos_embed = torch.nn.Parameter(
+            pos_embed_interpolated, requires_grad=False
+        )
 
     @torch.no_grad()
     def extract(self, img: torch.Tensor):
@@ -122,9 +169,9 @@ class SAMExtractor:
 
         Args:
             img: torch.Tensor of shape:
-                - [3, 1024, 1024] for single image
-                - [B, 3, 1024, 1024] for batch of images
-                SAM requires images to be exactly 1024x1024
+                - [3, H, H] for single image
+                - [B, 3, H, H] for batch of images
+                where H is the configured image_size (default 512)
 
         Returns:
             features: torch.Tensor [B, H_p*W_p, D] - patch token features
@@ -137,13 +184,13 @@ class SAMExtractor:
         assert img.dim() == 4, f"Expected 4D tensor, got {img.dim()}D"
         B, C, H, W = img.shape
         assert C == 3, f"Expected 3 channels, got {C}"
-        assert H == self.required_size and W == self.required_size, \
-            f"SAM requires {self.required_size}x{self.required_size} images, got {H}x{W}"
+        assert H == self.image_size and W == self.image_size, \
+            f"SAM requires {self.image_size}x{self.image_size} images, got {H}x{W}"
 
         img = img.to(self.device)
 
         # Forward pass through SAM's image encoder
-        # Output shape: [B, D, H_p, W_p] (e.g., [B, 256, 64, 64])
+        # Output shape: [B, D, H_p, W_p] (e.g., [B, 256, 32, 32] for 512x512 input)
         features = self.model.image_encoder(img)
 
         B, D, H_p, W_p = features.shape
