@@ -47,35 +47,46 @@ class DINOv2Extractor:
 
         return features, (H_p, W_p)
 
+import torch
+
 class DINOv3Extractor:
-    def __init__(self, model_name="dinov3_vitb16",
-                 repo_dir="<PATH/TO/A/LOCAL/DIRECTORY/WHERE/THE/DINOV3/REPO/WAS/CLONED>",
-                 weights="<CHECKPOINT/URL/OR/PATH>", ):
-        """Initialize DINOv3 feature extractor."""
+    def __init__(
+        self,
+        model_name="dinov3_vitb16",
+        repo_dir="<PATH/TO/A/LOCAL/DIRECTORY/WHERE/THE/DINOV3/REPO/WAS/CLONED>",
+        weights="<CHECKPOINT/URL/OR/PATH>",
+    ):
+        """
+        Initialize DINOv3 feature extractor.
+        - repo_dir: chemin local du repo dinov3 cloné (source="local")
+        - weights: checkpoint / URL / path selon l'impl dinov3
+        """
         self.model = torch.hub.load(repo_dir, model_name, source="local", weights=weights)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
+
+        # IMPORTANT: ne force pas eval() ici, car le training loop gère model.train()
+        # (tu peux laisser eval() si tu veux par défaut, mais ça n’empêche pas le finetune
+        #  tant que tu passes model.train() avant.)
         self.model.eval()
+
         self.patch_size = self.model.patch_size
 
-    @torch.no_grad()
-    def extract(self, img: torch.Tensor):
+    def extract(self, img: torch.Tensor, no_grad: bool = True):
         """
         Extract features from image(s).
 
         Args:
-            img: torch.Tensor of shape:
-                - [3, H, W] for single image
-                - [B, 3, H, W] for batch of images
-                All images must have the same H, W (already resized/normalized)
+            img: [3,H,W] or [B,3,H,W]
+            no_grad: True pour inference, False pour fine-tuning (garde les gradients)
 
         Returns:
-            features: torch.Tensor [B, H_p*W_p, D] - patch token features
-            spatial_dims: tuple (H_p, W_p) - spatial patch grid size
+            features: [B, H_p*W_p, D]
+            (H_p, W_p)
         """
         # Ensure batch dimension
         if img.dim() == 3:
-            img = img.unsqueeze(0)  # [1, 3, H, W]
+            img = img.unsqueeze(0)
 
         assert img.dim() == 4, f"Expected 4D tensor, got {img.dim()}D"
         B, C, H, W = img.shape
@@ -83,16 +94,23 @@ class DINOv3Extractor:
 
         img = img.to(self.device)
 
-        # Forward pass
-        out = self.model.forward_features(img)
+        # Mode: ton training loop gère model.train(), sinon eval
+        if no_grad:
+            self.model.eval()
+            with torch.no_grad():
+                out = self.model.forward_features(img)
+        else:
+            # IMPORTANT: pas de no_grad ici
+            out = self.model.forward_features(img)
 
-        # Extract patch tokens (shape: [B, H_p*W_p, D])
+        # DINO format
         features = out["x_norm_patchtokens"]
 
         H_p = H // self.patch_size
         W_p = W // self.patch_size
 
         return features, (H_p, W_p)
+
 
 class SAMExtractor:
     def __init__(self, model_type="vit_b", checkpoint_path="sam_vit_b_01ec64.pth", image_size=512):
