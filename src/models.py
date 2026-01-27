@@ -31,13 +31,13 @@ class DINOv2Extractor:
 
         img = img.to(self.device)
 
-        # mode: en training loop tu gères model.train(), sinon eval
+        # mode: in training loop handle model.train(), otherwise eval
         if no_grad:
             self.model.eval()
             with torch.no_grad():
                 out = self.model.forward_features(img)
         else:
-            # IMPORTANT: pas de no_grad ici
+            # IMPORTANT: no no_grad here
             out = self.model.forward_features(img)
 
         features = out["x_norm_patchtokens"]
@@ -47,7 +47,6 @@ class DINOv2Extractor:
 
         return features, (H_p, W_p)
 
-import torch
 
 class DINOv3Extractor:
     def __init__(
@@ -58,16 +57,16 @@ class DINOv3Extractor:
     ):
         """
         Initialize DINOv3 feature extractor.
-        - repo_dir: chemin local du repo dinov3 cloné (source="local")
-        - weights: checkpoint / URL / path selon l'impl dinov3
+        - repo_dir: local path of the cloned dinov3 repo (source="local")
+        - weights: checkpoint / URL / path
         """
         self.model = torch.hub.load(repo_dir, model_name, source="local", weights=weights)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
 
-        # IMPORTANT: ne force pas eval() ici, car le training loop gère model.train()
-        # (tu peux laisser eval() si tu veux par défaut, mais ça n’empêche pas le finetune
-        #  tant que tu passes model.train() avant.)
+        # IMPORTANT: do not force eval() here, since training loop handles model.train()
+        # (you can leave eval() by default, it won't stop the finetuning as long as
+        #  you put model.train() before)
         self.model.eval()
 
         self.patch_size = self.model.patch_size
@@ -78,7 +77,7 @@ class DINOv3Extractor:
 
         Args:
             img: [3,H,W] or [B,3,H,W]
-            no_grad: True pour inference, False pour fine-tuning (garde les gradients)
+            no_grad: True for inference, False for fine-tuning (keeps the gradients)
 
         Returns:
             features: [B, H_p*W_p, D]
@@ -94,13 +93,13 @@ class DINOv3Extractor:
 
         img = img.to(self.device)
 
-        # Mode: ton training loop gère model.train(), sinon eval
+        # Mode: training loop handles model.train(), otherwise eval
         if no_grad:
             self.model.eval()
             with torch.no_grad():
                 out = self.model.forward_features(img)
         else:
-            # IMPORTANT: pas de no_grad ici
+            # IMPORTANT: no no_grad here
             out = self.model.forward_features(img)
 
         # DINO format
@@ -239,3 +238,9 @@ class SAMExtractor:
 
         return feats, (H_p, W_p)
 
+<<<<<<< HEAD
+=======
+        return features, (H_p, W_p)
+
+
+>>>>>>> 81712961379b0e8edbc5f049c8ba568db5518ea9
