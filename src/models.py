@@ -112,93 +112,111 @@ class DINOv3Extractor:
         return features, (H_p, W_p)
 
 
+import torch
+import torch.nn.functional as F
+
+
 class SAMExtractor:
-    def __init__(self, model_type="vit_b", checkpoint_path="sam_vit_b_01ec64.pth", image_size=512):
+    def __init__(
+        self,
+        model_type="vit_b",
+        checkpoint_path="sam_vit_b_01ec64.pth",
+        image_size=512,
+        finetune_pos_embed=True,
+        freeze_image_encoder=False,
+    ):
         """
         Initialize SAM (Segment Anything Model) feature extractor.
 
         Args:
-            model_type: SAM model type ('vit_b', 'vit_l', 'vit_h')
-            checkpoint_path: Path to SAM checkpoint file
-            image_size: Target image size (default: 512). Will interpolate positional embeddings
-                       from the pretrained 1024x1024 model to match this size.
+            model_type: 'vit_b', 'vit_l', 'vit_h'
+            checkpoint_path: path to SAM checkpoint
+            image_size: target size (e.g. 512). Interpolates pos_embed from 1024->image_size.
+            finetune_pos_embed: if True, pos_embed remains trainable after interpolation
+            freeze_image_encoder: if True, freezes image_encoder params (except pos_embed if finetune_pos_embed)
         """
         from segment_anything import sam_model_registry
 
         self.model = sam_model_registry[model_type](checkpoint=checkpoint_path)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
-        self.model.eval()
 
-        # SAM's image encoder outputs 64x64 patches for 1024x1024 input
-        # So patch_size = 1024 / 64 = 16
+        # Patch size for SAM image encoder (1024 -> 64 tokens => 16 px/patch)
         self.patch_size = 16
         self.original_size = 1024
         self.image_size = image_size
-        
-        # Interpolate positional embeddings if using a different image size
+        self.finetune_pos_embed = finetune_pos_embed
+
+        # Default mode (tu peux override avec model.train() dans ton training loop)
+        self.model.eval()
+
+        # Interpolate pos embed if needed
         if self.image_size != self.original_size:
             self._interpolate_pos_embed()
+
+        # Optionnel: freeze/défreeze
+        if freeze_image_encoder:
+            self.freeze_image_encoder(keep_pos_embed_trainable=finetune_pos_embed)
+
+    def freeze_image_encoder(self, keep_pos_embed_trainable: bool = True):
+        """Freeze SAM image encoder parameters (optionally keep pos_embed trainable)."""
+        for p in self.model.image_encoder.parameters():
+            p.requires_grad = False
+
+        if keep_pos_embed_trainable and hasattr(self.model.image_encoder, "pos_embed"):
+            self.model.image_encoder.pos_embed.requires_grad = True
+
+    def unfreeze_image_encoder(self):
+        """Unfreeze SAM image encoder parameters."""
+        for p in self.model.image_encoder.parameters():
+            p.requires_grad = True
 
     def _interpolate_pos_embed(self):
         """
         Interpolate positional embeddings to match the target image size.
-        SAM's positional embeddings are for 64x64 patches (1024x1024 image).
-        For 512x512 images, we need 32x32 patches.
+        SAM pos_embed is [1, H, W, D] for 64x64 (1024/16).
+        For 512x512 => 32x32.
         """
-        
-        # Get the positional embedding from SAM's image encoder
-        # Shape: [1, H, W, D]
-        pos_embed = self.model.image_encoder.pos_embed
-        
-        # Original grid size (64x64 for 1024x1024 images)
-        original_grid_size = self.original_size // self.patch_size
-        
-        # New grid size (e.g., 32x32 for 512x512 images)
-        new_grid_size = self.image_size // self.patch_size
-        
-        if original_grid_size == new_grid_size:
-            return  # No interpolation needed
-        
-        # pos_embed shape: [1, H, W, D]
-        # Permute to [1, D, H, W] for interpolation
-        embed_dim = pos_embed.shape[-1]
-        pos_embed_reshaped = pos_embed.permute(0, 3, 1, 2)  # [1, D, H, W]
-        
-        # Interpolate using bicubic interpolation
-        pos_embed_interpolated = F.interpolate(
-            pos_embed_reshaped,
-            size=(new_grid_size, new_grid_size),
-            mode='bilinear',
-            align_corners=False
-        )
-        
-        # Permute back to [1, H, W, D]
-        pos_embed_interpolated = pos_embed_interpolated.permute(0, 2, 3, 1)
-        
-        # Update the positional embedding
-        self.model.image_encoder.pos_embed = torch.nn.Parameter(
-            pos_embed_interpolated, requires_grad=False
+        pos_embed = self.model.image_encoder.pos_embed  # [1, H, W,D]
+        original_grid = self.original_size // self.patch_size
+        new_grid = self.image_size // self.patch_size
+
+        if original_grid == new_grid:
+            return
+
+        # [1, H, W, D] -> [1, D, H, W]
+        pos = pos_embed.permute(0, 3, 1, 2)
+
+        pos_interp = F.interpolate(
+            pos,
+            size=(new_grid, new_grid),
+            mode="bilinear",
+            align_corners=False,
         )
 
-    @torch.no_grad()
-    def extract(self, img: torch.Tensor):
+        # back to [1, H, W, D]
+        pos_interp = pos_interp.permute(0, 2, 3, 1).contiguous()
+
+        # IMPORTANT: garder trainable si demandé
+        self.model.image_encoder.pos_embed = torch.nn.Parameter(
+            pos_interp,
+            requires_grad=bool(self.finetune_pos_embed),
+        )
+
+    def extract(self, img: torch.Tensor, no_grad: bool = True):
         """
-        Extract features from image(s).
+        Extract patch-token features from SAM image encoder.
 
         Args:
-            img: torch.Tensor of shape:
-                - [3, H, H] for single image
-                - [B, 3, H, H] for batch of images
-                where H is the configured image_size (default 512)
+            img: [3, H, W] or [B, 3, H, W], with H=W=image_size
+            no_grad: True for inference, False for fine-tuning (keeps gradients)
 
         Returns:
-            features: torch.Tensor [B, H_p*W_p, D] - patch token features
-            spatial_dims: tuple (H_p, W_p) - spatial patch grid size
+            features: [B, H_p*W_p, D]
+            (H_p, W_p)
         """
-        # Ensure batch dimension
         if img.dim() == 3:
-            img = img.unsqueeze(0)  # [1, 3, H, W]
+            img = img.unsqueeze(0)
 
         assert img.dim() == 4, f"Expected 4D tensor, got {img.dim()}D"
         B, C, H, W = img.shape
@@ -208,15 +226,16 @@ class SAMExtractor:
 
         img = img.to(self.device)
 
-        # Forward pass through SAM's image encoder
-        # Output shape: [B, D, H_p, W_p] (e.g., [B, 256, 32, 32] for 512x512 input)
-        features = self.model.image_encoder(img)
+        # Mode: ton training loop peut faire model.train() ; ici on suit le flag no_grad
+        if no_grad:
+            self.model.eval()
+            with torch.no_grad():
+                feats = self.model.image_encoder(img)  # [B, D, H_p, W_p]
+        else:
+            feats = self.model.image_encoder(img)      # grads OK
 
-        B, D, H_p, W_p = features.shape
+        B, D, H_p, W_p = feats.shape
+        feats = feats.permute(0, 2, 3, 1).reshape(B, H_p * W_p, D)  # [B, H_p*W_p, D]
 
-        # Reshape to match DINO format: [B, H_p*W_p, D]
-        # Permute [B, D, H_p, W_p] -> [B, H_p, W_p, D]
-        # Then reshape to [B, H_p*W_p, D]
-        features = features.permute(0, 2, 3, 1).reshape(B, H_p * W_p, D)
+        return feats, (H_p, W_p)
 
-        return features, (H_p, W_p)
