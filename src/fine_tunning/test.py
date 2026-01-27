@@ -205,7 +205,7 @@ def train_stage2(
         torch.save(payload, path)
 
     def _load_ckpt(path, model, optimizer, scaler):
-        ckpt = torch.load(path, map_location=matcher.device)
+        ckpt = torch.load(path, map_location=matcher.device,weight_only=False)
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         if scaler is not None and scaler.is_enabled() and ckpt.get("scaler") is not None:
