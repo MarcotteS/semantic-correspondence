@@ -82,24 +82,49 @@ def unfreeze_last_blocks_dino(model, n_last_blocks=1):
     for blk in model.blocks[-n_last_blocks:]:
         for p in blk.parameters():
             p.requires_grad = True
-def unfreeze_last_blocks_vit(backbone, n_last_blocks=1):
+def unfreeze_last_blocks_vit(obj, n_last_blocks=1):
     """
-    Compatible DINO & SAM
-    backbone = matcher.backbone
+    Accepte soit:
+    - un ViT direct (DINO): obj.blocks
+    - un SAM: obj.image_encoder.blocks
+    - un wrapper (matcher): cherche un sous-attribut qui contient le ViT/SAM
     """
 
-    # Cas DINO
-    if hasattr(backbone, "blocks"):
-        container = backbone
+    # 1) Si on nous donne directement DINO ViT
+    if hasattr(obj, "blocks"):
+        container = obj
 
-    # Cas SAM
-    elif hasattr(backbone, "image_encoder") and hasattr(backbone.image_encoder, "blocks"):
-        container = backbone.image_encoder
+    # 2) Si on nous donne directement SAM
+    elif hasattr(obj, "image_encoder") and hasattr(obj.image_encoder, "blocks"):
+        container = obj.image_encoder
 
     else:
-        raise AttributeError("Impossible de trouver .blocks dans le backbone")
+        # 3) Sinon: on suppose que c'est un wrapper (matcher) et on cherche un sous-module probable
+        candidates = [
+            "backbone", "model", "net", "encoder", "extractor", "feature_extractor",
+            "sam", "dino", "vit", "image_encoder"
+        ]
 
-    # Freeze tout
+        found = None
+        for name in candidates:
+            if hasattr(obj, name):
+                found = getattr(obj, name)
+                # DINO
+                if hasattr(found, "blocks"):
+                    container = found
+                    break
+                # SAM
+                if hasattr(found, "image_encoder") and hasattr(found.image_encoder, "blocks"):
+                    container = found.image_encoder
+                    break
+        else:
+            raise AttributeError(
+                "Je ne trouve pas les blocs ViT. "
+                "Ni obj.blocks (DINO), ni obj.image_encoder.blocks (SAM), "
+                "ni via les attributs usuels (model/encoder/extractor/etc.)."
+            )
+
+    # Freeze tout le container (ViT ou image_encoder)
     for p in container.parameters():
         p.requires_grad = False
 
@@ -107,6 +132,11 @@ def unfreeze_last_blocks_vit(backbone, n_last_blocks=1):
     for blk in container.blocks[-n_last_blocks:]:
         for p in blk.parameters():
             p.requires_grad = True
+
+    # (Option utile SAM) garder pos_embed entraînable si présent
+    if hasattr(container, "pos_embed") and isinstance(container.pos_embed, torch.nn.Parameter):
+        container.pos_embed.requires_grad = True
+
 
 
 
@@ -190,7 +220,7 @@ def train_stage2(
 
     # 1) Unfreeze last layers
     if isSam:
-        unfreeze_last_blocks_vit(matcher.backbone, n_last_blocks)
+        unfreeze_last_blocks_vit(matcher, n_last_blocks)
     else:
         unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
     
