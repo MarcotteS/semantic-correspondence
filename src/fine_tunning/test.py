@@ -220,7 +220,7 @@ def train_stage2(
 
     # 1) Unfreeze last layers
     if isSam:
-        unfreeze_last_blocks_vit(matcher, n_last_blocks)
+        unfreeze_last_blocks_dino(model.image_encoder, n_last_blocks=n_last_blocks)
     else:
         unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
     
