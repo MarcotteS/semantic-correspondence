@@ -114,7 +114,6 @@ class DINOv3Extractor:
 import torch
 import torch.nn.functional as F
 
-
 class SAMExtractor:
     def __init__(
         self,
@@ -176,7 +175,7 @@ class SAMExtractor:
         SAM pos_embed is [1, H, W, D] for 64x64 (1024/16).
         For 512x512 => 32x32.
         """
-        pos_embed = self.model.image_encoder.pos_embed  # [1, H, W,D]
+        pos_embed = self.model.image_encoder.pos_embed  # [1, H, W, D]
         original_grid = self.original_size // self.patch_size
         new_grid = self.image_size // self.patch_size
 
@@ -237,10 +236,3 @@ class SAMExtractor:
         feats = feats.permute(0, 2, 3, 1).reshape(B, H_p * W_p, D)  # [B, H_p*W_p, D]
 
         return feats, (H_p, W_p)
-
-<<<<<<< HEAD
-=======
-        return features, (H_p, W_p)
-
-
->>>>>>> 81712961379b0e8edbc5f049c8ba568db5518ea9
