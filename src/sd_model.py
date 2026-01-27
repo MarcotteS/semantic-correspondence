@@ -207,3 +207,65 @@ class StableDiffusionExtractor:
         )[0]
 
         return text_embeddings
+
+
+
+class MultiLayerSDExtractor:
+    """Ensemble multiple SD layers"""
+
+    def __init__(self, weights, timestep=100, layers=None):
+        if layers is None:
+            # Try combinations that make sense
+            layers = ["up_blocks.0", "up_blocks.1", "up_blocks.2"]
+            # or: layers = ["mid_block", "up_blocks.0", "up_blocks.1"] ...
+
+        self.extractors = []
+        for layer in layers:
+            ext = StableDiffusionExtractor(
+                weights=weights,
+                timestep=timestep,
+                layer_name=layer
+            )
+            self.extractors.append(ext)
+
+        self.device = self.extractors[0].device
+        self.patch_size = self.extractors[0].patch_size
+
+    def eval(self):
+        for ext in self.extractors:
+            ext.eval()
+        return self
+
+    @property
+    def model(self):
+        return self
+
+    @torch.no_grad()
+    def extract(self, img):
+        all_features = []
+        target_size = 32  # Upsample all to 32×32
+
+        for extractor in self.extractors:
+            features, (H, W) = extractor.extract(img)
+            B = features.shape[0]
+
+            # Upsample to common resolution if needed
+            if H != target_size or W != target_size:
+                feat_2d = features.reshape(B, H, W, -1).permute(0, 3, 1, 2)
+                feat_2d = F.interpolate(
+                    feat_2d,
+                    size=(target_size, target_size),
+                    mode='bilinear',
+                    align_corners=False
+                )
+                features = feat_2d.permute(0, 2, 3, 1).reshape(B, target_size*target_size, -1)
+
+            all_features.append(features)
+
+        # Concatenate
+        fused = torch.cat(all_features, dim=-1)
+
+        # Normalize
+        fused = F.normalize(fused, dim=-1)
+
+        return fused, (target_size, target_size)
