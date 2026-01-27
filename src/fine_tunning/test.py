@@ -82,6 +82,32 @@ def unfreeze_last_blocks_dino(model, n_last_blocks=1):
     for blk in model.blocks[-n_last_blocks:]:
         for p in blk.parameters():
             p.requires_grad = True
+def unfreeze_last_blocks_vit(backbone, n_last_blocks=1):
+    """
+    Compatible DINO & SAM
+    backbone = matcher.backbone
+    """
+
+    # Cas DINO
+    if hasattr(backbone, "blocks"):
+        container = backbone
+
+    # Cas SAM
+    elif hasattr(backbone, "image_encoder") and hasattr(backbone.image_encoder, "blocks"):
+        container = backbone.image_encoder
+
+    else:
+        raise AttributeError("Impossible de trouver .blocks dans le backbone")
+
+    # Freeze tout
+    for p in container.parameters():
+        p.requires_grad = False
+
+    # Unfreeze les derniers blocs
+    for blk in container.blocks[-n_last_blocks:]:
+        for p in blk.parameters():
+            p.requires_grad = True
+
 
 
 def make_optimizer(model, lr=2e-5, weight_decay=0.01):
@@ -100,7 +126,7 @@ def train_stage2(
     weight_decay=0.01,
     tau=0.07,
     max_batches_per_epoch=None,
-    use_amp=True,
+    use_amp=True,isSam=False
 ):
     import os
     import torch
@@ -163,7 +189,11 @@ def train_stage2(
     model = matcher.extractor.model
 
     # 1) Unfreeze last layers
-    unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
+    if isSam:
+        unfreeze_last_blocks_vit(matcher.backbone, n_last_blocks)
+    else:
+        unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
+    
 
     # 2) Optimizer
     optimizer = make_optimizer(model, lr=lr, weight_decay=weight_decay)
