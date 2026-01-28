@@ -264,11 +264,11 @@ class ResultsComparator:
 
     def generate_report(self, save_dir="./results_compare", threshold=0.10, top_n=15):
         os.makedirs(save_dir, exist_ok=True)
-        print("📊 Generating comparison report...")
+        print(" Generating comparison report...")
 
         self.plot_pck_curve(save_path=f"{save_dir}/pck_curve_compare.png")
         self.plot_per_category(threshold=threshold, save_path=f"{save_dir}/per_category_compare.png")
         self.plot_keypoint_difficulty(threshold=threshold, top_n=top_n, save_path=f"{save_dir}/keypoint_difficulty_compare.png")
         self.plot_image_difficulty_distribution(threshold=threshold, save_path=f"{save_dir}/image_distribution_compare.png")
 
-        print(f"✅ Report generated in {save_dir}/")
+        print(f" Report generated in {save_dir}/")

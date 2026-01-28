@@ -4,154 +4,14 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 
-class CorrespondenceMatcher2:
-    def __init__(self, feature_extractor):
-        self.extractor = feature_extractor
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    def find_correspondences(self, src_img, trg_img, src_kps):
-        is_batched = src_img.dim() == 4
-        if not is_batched:
-            src_img = src_img.unsqueeze(0)
-            trg_img = trg_img.unsqueeze(0)
-            src_kps = src_kps.unsqueeze(0)
-
-        src_img = src_img.to(self.device)
-        trg_img = trg_img.to(self.device)
-        src_kps = src_kps.to(self.device)
-
-        B, N, _ = src_kps.shape
-
-        src_feats, (h_p, w_p) = self.extractor.extract(src_img, no_grad=False)
-        trg_feats, _ = self.extractor.extract(trg_img, no_grad=False)
-
-        D = src_feats.shape[-1]
-        patch_size = self.extractor.patch_size
-
-        src_feats = F.normalize(src_feats, dim=-1)
-        trg_feats = F.normalize(trg_feats, dim=-1)
-
-        valid_mask = (src_kps[..., 0] >= 0)  # [B,N]
-
-        kps_grid = (src_kps / patch_size).long()
-        grid_x = kps_grid[..., 0].clamp(0, w_p - 1)
-        grid_y = kps_grid[..., 1].clamp(0, h_p - 1)
-        flat_indices = grid_y * w_p + grid_x  # [B,N]
-
-        flat_indices_expanded = flat_indices.unsqueeze(-1).expand(-1, -1, D)  # [B,N,D]
-        src_kp_feats = torch.gather(src_feats, 1, flat_indices_expanded)      # [B,N,D]
-
-        sim_matrix = torch.bmm(src_kp_feats, trg_feats.transpose(1, 2))       # [B,N,L]
-        return sim_matrix, (h_p, w_p), valid_mask
-
-
-def kps_to_flat_indices(kps, patch_size, h_p, w_p):
-    kps_grid = (kps / patch_size).long()
-    grid_x = kps_grid[..., 0].clamp(0, w_p - 1)
-    grid_y = kps_grid[..., 1].clamp(0, h_p - 1)
-    return grid_y * w_p + grid_x  # [B,N]
-
-
-def correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_src_mask, tau=0.07):
-    B, N, L = sim_matrix.shape
-    trg_kps = trg_kps.to(sim_matrix.device)
-
-    valid = valid_src_mask & (trg_kps[..., 0] >= 0)  # [B,N]
-    labels = kps_to_flat_indices(trg_kps, patch_size, h_p, w_p)  # [B,N]
-
-    logits = (sim_matrix / tau).reshape(B * N, L)
-    labels = labels.reshape(B * N)
-    mask = valid.reshape(B * N)
-
-    logits = logits[mask]
-    labels = labels[mask]
-
-    if logits.shape[0] == 0:
-        return None
-
-    return F.cross_entropy(logits, labels)
-
-
-def unfreeze_last_blocks_dino(model, n_last_blocks=1):
-    for p in model.parameters():
-        p.requires_grad = False
-
-    if not hasattr(model, "blocks"):
-        raise AttributeError("Le modèle n'a pas d'attribut .blocks (ViT).")
-
-    for blk in model.blocks[-n_last_blocks:]:
-        for p in blk.parameters():
-            p.requires_grad = True
-def unfreeze_last_blocks_vit(obj, n_last_blocks=1):
-    """
-    Accepte soit:
-    - un ViT direct (DINO): obj.blocks
-    - un SAM: obj.image_encoder.blocks
-    - un wrapper (matcher): cherche un sous-attribut qui contient le ViT/SAM
-    """
-
-    # 1) Si on nous donne directement DINO ViT
-    if hasattr(obj, "blocks"):
-        container = obj
-
-    # 2) Si on nous donne directement SAM
-    elif hasattr(obj, "image_encoder") and hasattr(obj.image_encoder, "blocks"):
-        container = obj.image_encoder
-
-    else:
-        # 3) Sinon: on suppose que c'est un wrapper (matcher) et on cherche un sous-module probable
-        candidates = [
-            "backbone", "model", "net", "encoder", "extractor", "feature_extractor",
-            "sam", "dino", "vit", "image_encoder"
-        ]
-
-        found = None
-        for name in candidates:
-            if hasattr(obj, name):
-                found = getattr(obj, name)
-                # DINO
-                if hasattr(found, "blocks"):
-                    container = found
-                    break
-                # SAM
-                if hasattr(found, "image_encoder") and hasattr(found.image_encoder, "blocks"):
-                    container = found.image_encoder
-                    break
-        else:
-            raise AttributeError(
-                "Je ne trouve pas les blocs ViT. "
-                "Ni obj.blocks (DINO), ni obj.image_encoder.blocks (SAM), "
-                "ni via les attributs usuels (model/encoder/extractor/etc.)."
-            )
-
-    # Freeze tout le container (ViT ou image_encoder)
-    for p in container.parameters():
-        p.requires_grad = False
-
-    # Unfreeze les derniers blocs
-    for blk in container.blocks[-n_last_blocks:]:
-        for p in blk.parameters():
-            p.requires_grad = True
-
-    # (Option utile SAM) garder pos_embed entraînable si présent
-    if hasattr(container, "pos_embed") and isinstance(container.pos_embed, torch.nn.Parameter):
-        container.pos_embed.requires_grad = True
-
-
-
-
-def make_optimizer(model, lr=2e-5, weight_decay=0.01):
-    params = [p for p in model.parameters() if p.requires_grad]
-    if len(params) == 0:
-        raise ValueError("Aucun paramètre entraînable.")
-    return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
-
-
+#this method is used for train the models, if the matcher name already exists and associeted with a .pt file
+#the fonction return the checkpoint or resume the training if all the epochs are not yet finished
+#the checkpoints containts information such as the wheights, loss history etc...
 def train_stage2(
     matcher,
     train_loader,
-    n_epochs=1,              # TOTAL epochs à atteindre
-    n_last_blocks=1,
+    n_epochs=1,              #just this two hyperparameters were changed before the training
+    n_last_blocks=1,         #because the training was to long to experiment with too many hyperparameters
     lr=2e-5,
     weight_decay=0.01,
     tau=0.07,
@@ -358,3 +218,79 @@ def plot_loss_steps(step_history, loss_history, smooth=50):
     plt.title("Loss per mini-batch")
     plt.legend()
     plt.show()
+
+
+
+def unfreeze_last_blocks_dino(model, n_last_blocks=1):
+    for p in model.parameters():
+        p.requires_grad = False
+
+    if not hasattr(model, "blocks"):
+        raise AttributeError("Le modèle n'a pas d'attribut .blocks (ViT).")
+
+    for blk in model.blocks[-n_last_blocks:]:
+        for p in blk.parameters():
+            p.requires_grad = True
+def unfreeze_last_blocks_vit(obj, n_last_blocks=1):
+    """
+    Accepte soit:
+    - un ViT direct (DINO): obj.blocks
+    - un SAM: obj.image_encoder.blocks
+    - un wrapper (matcher): cherche un sous-attribut qui contient le ViT/SAM
+    """
+
+    # 1) Si on nous donne directement DINO ViT
+    if hasattr(obj, "blocks"):
+        container = obj
+
+    # 2) Si on nous donne directement SAM
+    elif hasattr(obj, "image_encoder") and hasattr(obj.image_encoder, "blocks"):
+        container = obj.image_encoder
+
+    else:
+        # 3) Sinon: on suppose que c'est un wrapper (matcher) et on cherche un sous-module probable
+        candidates = [
+            "backbone", "model", "net", "encoder", "extractor", "feature_extractor",
+            "sam", "dino", "vit", "image_encoder"
+        ]
+
+        found = None
+        for name in candidates:
+            if hasattr(obj, name):
+                found = getattr(obj, name)
+                # DINO
+                if hasattr(found, "blocks"):
+                    container = found
+                    break
+                # SAM
+                if hasattr(found, "image_encoder") and hasattr(found.image_encoder, "blocks"):
+                    container = found.image_encoder
+                    break
+        else:
+            raise AttributeError(
+                "Je ne trouve pas les blocs ViT. "
+                "Ni obj.blocks (DINO), ni obj.image_encoder.blocks (SAM), "
+                "ni via les attributs usuels (model/encoder/extractor/etc.)."
+            )
+
+    # Freeze tout le container (ViT ou image_encoder)
+    for p in container.parameters():
+        p.requires_grad = False
+
+    # Unfreeze les derniers blocs
+    for blk in container.blocks[-n_last_blocks:]:
+        for p in blk.parameters():
+            p.requires_grad = True
+
+    # (Option utile SAM) garder pos_embed entraînable si présent
+    if hasattr(container, "pos_embed") and isinstance(container.pos_embed, torch.nn.Parameter):
+        container.pos_embed.requires_grad = True
+
+
+
+
+def make_optimizer(model, lr=2e-5, weight_decay=0.01):
+    params = [p for p in model.parameters() if p.requires_grad]
+    if len(params) == 0:
+        raise ValueError("Aucun paramètre entraînable.")
+    return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
