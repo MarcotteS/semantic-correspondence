@@ -41,7 +41,6 @@ class StableDiffusionExtractor:
         self.dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
         # Load U-Net
-        print("  Loading UNet...")
         self.unet = UNet2DConditionModel.from_pretrained(
             weights,
             subfolder="unet",
@@ -50,7 +49,6 @@ class StableDiffusionExtractor:
         ).to(self.device)
 
         # Load VAE (for encoding images to latent space)
-        print("  Loading VAE...")
         self.vae = AutoencoderKL.from_pretrained(
             weights,
             subfolder="vae",
@@ -58,8 +56,7 @@ class StableDiffusionExtractor:
             local_files_only=True
         ).to(self.device)
 
-        # Load text encoder (even though we use empty prompts)
-        print("  Loading text encoder...")
+        # Load text encoder (even if we use empty prompts)
         self.text_encoder = CLIPTextModel.from_pretrained(
             weights,
             subfolder="text_encoder",
@@ -68,15 +65,13 @@ class StableDiffusionExtractor:
         ).to(self.device)
 
         # Load tokenizer
-        print("  Loading tokenizer...")
         self.tokenizer = CLIPTokenizer.from_pretrained(
             weights,
             subfolder="tokenizer",
             local_files_only=True
         )
 
-        # Load scheduler (for adding noise)
-        print("  Loading scheduler...")
+        # Load scheduler to add noise
         self.scheduler = DDPMScheduler.from_pretrained(
             weights,
             subfolder="scheduler",
@@ -87,7 +82,6 @@ class StableDiffusionExtractor:
         self.unet.eval()
         self.vae.eval()
         self.text_encoder.eval()
-
 
         # Store config
         self.timestep = timestep
@@ -139,44 +133,39 @@ class StableDiffusionExtractor:
         B, C, H, W = img.shape
         assert C == 3, f"Expected 3 channels, got {C}"
 
-        # Move to device
         img = img.to(self.device, dtype=self.dtype)
 
-        # CRITICAL: Handle different normalization schemes
+        # Handle different normalization schemes
         img_min, img_max = img.min().item(), img.max().item()
 
         if img_min < -0.5:
-            # ImageNet stats: mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
             mean = torch.tensor([0.485, 0.456, 0.406], device=self.device, dtype=self.dtype).view(1, 3, 1, 1)
             std = torch.tensor([0.229, 0.224, 0.225], device=self.device, dtype=self.dtype).view(1, 3, 1, 1)
 
-            # Denormalize: img_denorm = img * std + mean
             img = img * std + mean
             img = torch.clamp(img, 0, 1)  # Ensure [0, 1] range
 
         elif img_max > 1.5:
-            # [0, 255] range
             img = img / 255.0
 
-        # Now img should be in [0, 1] range
-        # Convert to [-1, 1] for Stable Diffusion
+        # Convert to [-1, 1] for SD
         img = img * 2.0 - 1.0
 
-        # Encode image to latent space using VAE
+        # Encode image with VAE
         latents = self.vae.encode(img).latent_dist.sample()
         latents = latents * self.vae.config.scaling_factor
 
-        # Prepare timestep
+        # Timestep
         t = torch.tensor([self.timestep], device=self.device).long().expand(B)
 
-        # Add noise (simulate diffusion forward process)
+        # Add noise
         noise = torch.randn_like(latents)
         noisy_latents = self.scheduler.add_noise(latents, noise, t)
 
-        # Get text embeddings (empty prompt)
+        # Text embeddings (empty prompt)
         text_embeddings = self._get_empty_text_embeddings(B)
 
-        # Forward pass through U-Net with feature hook
+        # Forward pass through U-Net
         handle = self._register_hook()
         _ = self.unet(noisy_latents, t, encoder_hidden_states=text_embeddings).sample
         handle.remove()
@@ -215,7 +204,7 @@ class MultiLayerSDExtractor:
 
     def __init__(self, weights, timestep=100, layers=None):
         if layers is None:
-            # Try combinations that make sense
+            # Try some combinations
             layers = ["up_blocks.0", "up_blocks.1", "up_blocks.2"]
             # or: layers = ["mid_block", "up_blocks.0", "up_blocks.1"] ...
 
@@ -243,7 +232,7 @@ class MultiLayerSDExtractor:
     @torch.no_grad()
     def extract(self, img):
         all_features = []
-        target_size = 32  # Upsample all to 32×32
+        target_size = 32  # Upsample all to 32x32
 
         for extractor in self.extractors:
             features, (H, W) = extractor.extract(img)
@@ -262,10 +251,74 @@ class MultiLayerSDExtractor:
 
             all_features.append(features)
 
-        # Concatenate
+        # Concatenate and normalize
         fused = torch.cat(all_features, dim=-1)
-
-        # Normalize
         fused = F.normalize(fused, dim=-1)
 
         return fused, (target_size, target_size)
+
+
+class SDDINOFusion:
+    """Fuse SD and DINOv2 features"""
+
+    def __init__(self, sd_extractor, dino_extractor, alpha=0.5):
+        self.sd_extractor = sd_extractor
+        self.dino_extractor = dino_extractor
+        self.device = sd_extractor.device
+        self.patch_size = dino_extractor.patch_size
+        self.alpha = alpha  # Weight to apply to SD features
+
+    def eval(self):
+        if hasattr(self.sd_extractor, 'eval'):
+            self.sd_extractor.eval()
+        if hasattr(self.dino_extractor, 'eval'):
+            self.dino_extractor.eval()
+
+        if hasattr(self.sd_extractor, 'model'):
+            self.sd_extractor.model.eval()
+        if hasattr(self.dino_extractor, 'model'):
+            self.dino_extractor.model.eval()
+
+        return self
+
+    @property
+    def model(self):
+        return self
+
+    @torch.no_grad()
+    def extract(self, img):
+        B, C, H_img, W_img = img.shape
+
+        # Extract SD features (512x512)
+        if H_img != 512:
+            img_sd = F.interpolate(img, size=(512, 512), mode='bilinear', align_corners=False)
+        else:
+            img_sd = img
+        sd_feat, (H_sd, W_sd) = self.sd_extractor.extract(img_sd)
+
+        # Extract DINO features (518x518)
+        if H_img != 518:
+            img_dino = F.interpolate(img, size=(518, 518), mode='bilinear', align_corners=False)
+        else:
+            img_dino = img
+        dino_feat, (H_dino, W_dino) = self.dino_extractor.extract(img_dino)
+
+        # Upsample SD to match DINO resolution (37x37)
+        if (H_sd, W_sd) != (H_dino, W_dino):
+            sd_feat_2d = sd_feat.reshape(B, H_sd, W_sd, -1).permute(0, 3, 1, 2)
+            sd_feat_2d = F.interpolate(sd_feat_2d, size=(H_dino, W_dino),
+                                       mode='bilinear', align_corners=False)
+            sd_feat = sd_feat_2d.permute(0, 2, 3, 1).reshape(B, H_dino * W_dino, -1)
+
+        # L2 normalize each feature independently
+        sd_feat_norm = F.normalize(sd_feat, dim=-1)
+        dino_feat_norm = F.normalize(dino_feat, dim=-1)
+
+        # Apply weighted fusion
+        sd_weighted = self.alpha * sd_feat_norm
+        dino_weighted = (1 - self.alpha) * dino_feat_norm
+
+        # Concatenate
+        fused_feat = torch.cat([sd_weighted, dino_weighted], dim=-1)
+
+        return fused_feat, (H_dino, W_dino)
