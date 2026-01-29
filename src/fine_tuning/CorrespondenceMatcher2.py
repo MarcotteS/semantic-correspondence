@@ -53,7 +53,7 @@ def kps_to_flat_indices(kps, patch_size, h_p, w_p):
     return grid_y * w_p + grid_x  
 
 """
-this is the most IA part of the finetuning: we use a cross entropy loss to train the model to predict the right correspondance
+we use a cross entropy loss to train the model to predict the right correspondance
 """
 def correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_src_mask, tau=0.07):
     B, N, L = sim_matrix.shape
