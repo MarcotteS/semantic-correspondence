@@ -23,6 +23,10 @@ Performance is measured on the **SPair-71k** benchmark, using the **PCK (Percent
 ### Download data and models
 
 ### Run the scripts
+- To evaluate the features extraction with DINOv2, DINOv3 and SAM (without fine-tuning): ./scripts/run_baseline.py
+- To run the fine-tuned models :
+- To evaluate the features extraction with SD: ./scripts/run_sd.py
+- To evaluate the features extraction with the fusion of SD and DINOv2 : ./scripts/run_sddino_fusion.py
 
 ## References
 * Tang et al., NeurIPS 2023 - Emergent Correspondence from Image Diffusion

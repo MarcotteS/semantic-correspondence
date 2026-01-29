@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """Script to plot SD per-category PCK against DINOv2's"""
 
 import matplotlib.pyplot as plt

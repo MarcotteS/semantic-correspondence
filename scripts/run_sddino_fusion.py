@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
+
 import sys
 import torch
 import torch.nn.functional as F
 from diffusers import UNet2DConditionModel, AutoencoderKL, DDPMScheduler, StableDiffusionPipeline
 from transformers import CLIPTextModel, CLIPTokenizer
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Union
 from pathlib import Path
 from torch.utils.data import DataLoader
 import os
@@ -14,44 +16,32 @@ repo_root = Path(__file__).parent.parent
 sys.path.insert(0, str(repo_root))
 
 from src.dataset import SPairDataset, collate_fn_correspondence
-from src.sd_model import StableDiffusionExtractor
+from src.sd_model import StableDiffusionExtractor, MultiLayerSDExtractor, SDDINOFusion
+from src.models import DINOv2Extractor
 from src.correspondence import CorrespondenceMatcher
 from src.evaluation import evaluate_model
 from src.analyzer import ResultsAnalyzer
 
+from scripts.run_sd import run_sd_baseline, download_weights_if_needed
+from scripts.run_baseline import dinov2_baseline
+
 WEIGHTS_PATH = "/content/sd-1-5-weights"  # to update
 
-
-def download_weights_if_needed(weights_path: str = WEIGHTS_PATH):
-    """Download SD weights if not already present."""
-    if os.path.exists(weights_path):
-        print("Weights already downloaded, skipping...")
-    else:
-        print(f"Downloading weights to {weights_path}...")
-        pipe = StableDiffusionPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5",
-            torch_dtype=torch.float16
-        )
-        pipe.save_pretrained(weights_path)
-        print(f"Weights saved to {weights_path}")
-
-
-def run_sd_baseline(
+def run_fusion(
     timestep: int,
-    layer_name: str,
-    model_suffix: str = "",
-    image_size: int = 512,
+    layers: Union[str, List[str]],
+    image_size: int = 518,
     batch_size: int = 4,
     category: str = 'all',
-    weights_path: str = WEIGHTS_PATH
+    weights_path: str = WEIGHTS_PATH,
+    alpha: float=0.5
 ):
     """
-    Run SD baseline evaluation with specified timestep and layer.
+    Run SD baseline evaluation with specified timestep and layer(s)
     
     Args:
         timestep: Diffusion timestep to extract features from
-        layer_name: Layer to extract features from (e.g., "up_blocks.1")
-        model_suffix: Optional suffix for model name (e.g., "t261", "layer2")
+        layers: Single layer name (str) or list of layer names for ensemble
         image_size: Image size for evaluation
         batch_size: Batch size for dataloader
         category: SPair category to evaluate on
@@ -73,37 +63,49 @@ def run_sd_baseline(
         collate_fn=collate_fn_correspondence
     )
 
-    # Initialize extractor
-    extractor = StableDiffusionExtractor(
-        weights=weights_path,
-        model_name="sd-1-5",
-        timestep=timestep,
-        layer_name=layer_name
-    )
+    # Initialize SD extractor (single or multi-layer)
+    if isinstance(layers, str):
+        sd_extractor = StableDiffusionExtractor(
+            weights=weights_path,
+            model_name="sd-1-5",
+            timestep=timestep,
+            layer_name=layers
+        )
+        layer_str = layers
+    else:
+        sd_extractor = MultiLayerSDExtractor(
+            weights=weights_path,
+            timestep=timestep,
+            layers=layers
+        )
+        layer_str = "+".join([layer.replace("up_blocks.", "up").replace("mid_block", "mid") 
+                              for layer in layers])
 
-    # Create matcher
-    matcher = CorrespondenceMatcher(extractor)
+    # Initialize DINOv2 Extractor
+    dino_extractor = DINOv2Extractor(model_name="dinov2_vitb14")
+
+
+    # Fusion matcher
+    fusion = SDDINOFusion(sd_extractor, dino_extractor, alpha)
+    matcher = CorrespondenceMatcher(fusion)
 
     # Evaluate
-    print(f"Evaluating SD (timestep={timestep}, layer={layer_name})...")
+    print(f"Evaluating SD (timestep={timestep}, layers={layers})...")
     metrics = evaluate_model(matcher, dataloader)
 
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_name = f"sd-1-5-t{timestep}-{layer_name.replace('.', '_')}"
-    if model_suffix:
-        model_name += f"-{model_suffix}"
+    model_name = f"fusion-dinov2-sd-t{timestep}-{layer_str.replace('.', '_')}"
 
     results_dict = {
         'metrics': metrics,
         'model': model_name,
-        'config': {
+        'config_sd': {
             'weights': 'stable-diffusion-v1-5',
             'timestep': timestep,
-            'layer': layer_name,
-            'image_size': image_size,
-            'batch_size': batch_size
+            'layers': layers if isinstance(layers, list) else [layers],
         },
+        'image_size': image_size,
         'timestamp': timestamp
     }
 
@@ -125,17 +127,16 @@ def run_sd_baseline(
 
 
 def main():
-    """Run multiple SD baselines with different configurations."""
     # Download weights once
     download_weights_if_needed()
     
-    # Default DIFT configuration
-    run_sd_baseline(
-        timestep=261, # can change (t<1000), try t=100 
-        layer_name="up_blocks.1", # can change (up_blocks.0, up_blocks.2, mid_block, ...)
-        model_suffix="baseline"
+    run_fusion(
+        timestep=261, # to change, try t=100 for instance
+        layers="up_blocks.1", # single layer or ensemble (list)
+        alpha=0.5 # can change
     )
-
+    
+    
 
 if __name__ == "__main__":
     main()
