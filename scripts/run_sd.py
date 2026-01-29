@@ -21,21 +21,7 @@ from src.correspondence import CorrespondenceMatcher
 from src.evaluation import evaluate_model
 from src.analyzer import ResultsAnalyzer
 
-WEIGHTS_PATH = "/content/sd-1-5-weights"  # to update
-
-
-def download_weights_if_needed(weights_path: str = WEIGHTS_PATH):
-    """Download SD weights if not already present"""
-    if os.path.exists(weights_path):
-        print("Weights already downloaded, skipping...")
-    else:
-        print(f"Downloading weights to {weights_path}...")
-        pipe = StableDiffusionPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5",
-            torch_dtype=torch.float16
-        )
-        pipe.save_pretrained(weights_path)
-        print(f"Weights saved to {weights_path}")
+WEIGHTS_PATH = "/weights/sd-1-5-weights"
 
 
 def run_sd_baseline(
@@ -141,9 +127,6 @@ def run_sd_baseline(
 
 def main():
     """Run multiple SD baselines with different configurations"""
-    # Download weights once
-    download_weights_if_needed()
-    
     # Single layer
     run_sd_baseline(
         timestep=261, # to change, try t=100 for instance

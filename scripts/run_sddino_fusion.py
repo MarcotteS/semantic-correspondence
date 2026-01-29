@@ -22,10 +22,10 @@ from src.correspondence import CorrespondenceMatcher
 from src.evaluation import evaluate_model
 from src.analyzer import ResultsAnalyzer
 
-from scripts.run_sd import run_sd_baseline, download_weights_if_needed
+from scripts.run_sd import run_sd_baseline
 from scripts.run_baseline import dinov2_baseline
 
-WEIGHTS_PATH = "/content/sd-1-5-weights"  # to update
+WEIGHTS_PATH = "/weights/sd-1-5-weights"
 
 def run_fusion(
     timestep: int,
@@ -126,10 +126,7 @@ def run_fusion(
     return metrics
 
 
-def main():
-    # Download weights once
-    download_weights_if_needed()
-    
+def main(): 
     run_fusion(
         timestep=261, # to change, try t=100 for instance
         layers="up_blocks.1", # single layer or ensemble (list)
