@@ -19,7 +19,8 @@ import os
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-import CorrespondenceMatcher2
+from CorrespondenceMatcher2 import CorrespondenceMatcher2
+
 
 def load_matcher_from_drive_ckpt(
     ckpt_path: str,
