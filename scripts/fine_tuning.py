@@ -41,7 +41,8 @@ MODEL = "dinov2"          # "dinov2" | "dinov3" | "sam"
 N_EPOCHS = 1
 BATCH_SIZE = 16
 N_UNFREEZE_LAYERS = 1
-IMAGE_SIZE=518
+
+IMG_SIZES = {"dinov2": 518, "dinov3": 512, "sam": 512}
 
 SAM_BASE_CKPT = repo_root / "weights" / "sam_vit_b_01ec64.pth"
 DINOV3_REPO = str(repo_root / "backbones" / "dinov3")
@@ -53,7 +54,7 @@ def create_extractor(model: str):
     elif model == "dinov3":
         ext = DINOv3Extractor(model_name="dinov3_vitb16", repo_dir=DINOV3_REPO, weights=DINOV3_CKPT)
     elif model == "sam":
-        ext = SAMExtractor(model_type="vit_b", checkpoint_path=str(SAM_BASE_CKPT), image_size=IMAGE_SIZE)
+        ext = SAMExtractor(model_type="vit_b", checkpoint_path=str(SAM_BASE_CKPT), image_size=IMG_SIZES[model])
     else:
         raise ValueError("Unknown model")
     return ext
@@ -82,7 +83,7 @@ def run_training(extractor, train_loader):
     ckpt_dir = repo_root / "weights"
     matcher = CorrespondenceMatcher2(extractor)
     matcher.ckpt_dir = str(ckpt_dir)
-    matcher.exp_name = f"{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}Layers"
+    matcher.exp_name = f"{MODEL}with{N_EPOCHS}epochsImages{IMG_SIZES[MODEL]}with{N_UNFREEZE_LAYERS}Layers"
     matcher.resume = True
     matcher.save_every_epoch = 1
 
@@ -124,7 +125,7 @@ def run_evaluation(extractor, dataloader, image_size: int):
     metrics_after = evaluate_model(
         matcher_eval,
         dataloader,
-        run_name=f"{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}LayersMetrics"
+        run_name=f"{MODEL}with{N_EPOCHS}epochsImages{IMG_SIZES[MODEL]}with{N_UNFREEZE_LAYERS}LayersMetrics"
     )
     return metrics_after
 
@@ -142,14 +143,14 @@ def save_and_report(metrics_after, image_size: int):
 
     print(f"Results saved!")
     analyzer = ResultsAnalyzer(metrics_after)
-    analyzer.generate_report(save_dir=f'./results/{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}Layers')
+    analyzer.generate_report(save_dir=f'./results/{MODEL}with{N_EPOCHS}epochsImages{IMG_SIZES[MODEL]}with{N_UNFREEZE_LAYERS}Layers')
     summary_df = analyzer.create_summary_table(threshold=0.10)
     print(summary_df)
 
 
 
 def main():
-    image_size = IMAGE_SIZE 
+    image_size = IMG_SIZES[MODEL] 
 
     train_loader = build_train_loader(image_size)
     extractor = create_extractor(MODEL)
