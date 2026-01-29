@@ -15,7 +15,7 @@ Performance is measured on the **SPair-71k** benchmark, using the **PCK (Percent
 - `data/` indicates where to store the downloaded data from SPair-71k (also downloaded in the notebooks)
 - `src/` regroups all the classes and methods used in this project (extractors for each model, evaluation methods...)
 - `scripts/` contains mainly python scripts to run for evaluating the different feature extraction models
-- `results\` stores the files produced by the execution of the scripts
+- `weights/` indicates where to store the weights of the different models used
 - `notebooks/` contains different notebooks used to develop this project (with Colab)
 
 ### Requirements
@@ -23,10 +23,10 @@ Performance is measured on the **SPair-71k** benchmark, using the **PCK (Percent
 ### Download data and models
 
 ### Run the scripts
-- To evaluate the features extraction with DINOv2, DINOv3 and SAM (without fine-tuning): ./scripts/run_baseline.py
+- To evaluate the features extraction with DINOv2, DINOv3 and SAM (without fine-tuning): `./scripts/run_baseline.py`
 - To run the fine-tuned models :
-- To evaluate the features extraction with SD: ./scripts/run_sd.py
-- To evaluate the features extraction with the fusion of SD and DINOv2 : ./scripts/run_sddino_fusion.py
+- To evaluate the features extraction with SD: `./scripts/run_sd.py`
+- To evaluate the features extraction with the fusion of SD and DINOv2 : `./scripts/run_sddino_fusion.py`
 
 ## References
 * Tang et al., NeurIPS 2023 - Emergent Correspondence from Image Diffusion

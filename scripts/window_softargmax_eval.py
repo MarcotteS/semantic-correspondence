@@ -36,16 +36,16 @@ DINOV3_CHECKPOINT = None
 SAM_CHECKPOINT = None
 
 # Paths
-SAM_BASE_CKPT = repo_root / "backbones" / "segment-anything" / "checkpoints" / "sam_vit_b_01ec64.pth"
+SAM_BASE_CKPT = repo_root / "weights" / "sam_vit_b_01ec64.pth"
 DINOV3_REPO = str(repo_root / "backbones" / "dinov3")
-DINOV3_CKPT = str(repo_root / "backbones" / "dinov3" / "checkpoints" / "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
-FINETUNED_DIR = repo_root / "fintunned"
+DINOV3_CKPT = str(repo_root / "weights" / "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
+FINETUNED_DIR = repo_root / "weights"
 
 # Hyperparams
 WINDOW_SIZE = 5
 TEMPERATURE = 0.05
-BATCH_SIZE = 8
-NUM_WORKERS = 2
+BATCH_SIZE = 16
+NUM_WORKERS = 4
 CATEGORY = "all"
 
 # For grid search
@@ -56,12 +56,13 @@ SEARCH_MODEL = "dinov2"
 IMG_SIZES = {"dinov2": 518, "dinov3": 512, "sam": 512}
 
 FINETUNED_MODELS = {
-    #"DINOv2_1ep_2layers": ("dinov2", FINETUNED_DIR / "DinOV2with1epochsImages518with2Layers.pt"),
-    #"DINOv2_2ep_1layer": ("dinov2", FINETUNED_DIR / "DinOV2with2epochsImages518with1Layers.pt"),
-    #"DINOv3_3ep_1layer": ("dinov3", FINETUNED_DIR / "DINOv3with3epochsImages518with1Layers.pt"),
-    #"DINOv3_3ep_2layers": ("dinov3", FINETUNED_DIR / "DINO3with3epochsImages518with2Layers.pt"),
-    #"SAM_1ep_1layer": ("sam", FINETUNED_DIR / "SAMwith1epochsImages512with1Layers.pt"),
+    "DINOv2_1ep_2layers": ("dinov2", FINETUNED_DIR / "DinOV2with1epochsImages518with2Layers.pt"),
+    "DINOv2_2ep_1layer": ("dinov2", FINETUNED_DIR / "DinOV2with2epochsImages518with1Layers.pt"),
+    "DINOv3_3ep_1layer": ("dinov3", FINETUNED_DIR / "DINOv3with3epochsImages518with1Layers.pt"),
+    "DINOv3_3ep_2layers": ("dinov3", FINETUNED_DIR / "DINO3with3epochsImages518with2Layers.pt"),
+    "SAM_1ep_1layer": ("sam", FINETUNED_DIR / "SAMwith1epochsImages512with1Layers.pt"),
     "DINOv2_1ep_1layer": ("dinov2", FINETUNED_DIR / "DinOV2with1epochsImages518with1Layers.pt"),
+    "DINOv3_1ep_1layer": ("dinov3", FINETUNED_DIR / "DINOv3with1epochsImages518with1Layers.pt"),
 }
 
 
