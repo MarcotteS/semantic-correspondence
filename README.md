@@ -22,7 +22,28 @@ Performance is measured on the **SPair-71k** benchmark, using the **PCK (Percent
 
 ### Requirements
 
+```bash
+pip install -r requirements.txt
+```
 ### Download data and models
+
+**SPair-71k Dataset:**
+```bash
+cd data/
+wget https://cvlab.postech.ac.kr/research/SPair-71k/data/SPair-71k.tar.gz
+tar -xzf SPair-71k.tar.gz
+```
+
+**Model weights** (place in `weights/`):
+- **DINOv2**: Downloaded automatically via torch hub
+- **DINOv3**: Download from [Meta AI](https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/) → `dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth`
+- **SAM**: Download from [segment-anything releases](https://github.com/facebookresearch/segment-anything#model-checkpoints) → `sam_vit_b_01ec64.pth`
+
+**DINOv3 repository** (place in `backbones/`):
+```bash
+cd backbones/
+git clone https://github.com/facebookresearch/dinov3.git
+```
 
 ### Run the scripts
 
