@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 import glob
@@ -17,6 +19,9 @@ from collections import defaultdict
 import pickle
 from datetime import datetime
 import pandas as pd
+
+repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(repo_root))
 
 from src.fine_tuning.CorrespondenceMatcher2 import CorrespondenceMatcher2
 from src.fine_tuning.ptFilesLoader import load_matcher_from_drive_ckpt
@@ -58,7 +63,7 @@ def create_extractor(model: str):
 
 def build_train_loader(image_size: int):
     dataset = SPairDataset(
-        datapath='.',
+        datapath='./data/',
         split='trn',
         img_size=image_size,
         category='all'
@@ -100,7 +105,7 @@ def run_training(extractor, train_loader):
 
 def build_test_loader(image_size: int):
     dataset = SPairDataset(
-        datapath='.',
+        datapath='./data/',
         split='test',
         img_size=image_size,
         category='all'
