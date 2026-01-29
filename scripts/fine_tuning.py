@@ -79,14 +79,14 @@ def build_train_loader(image_size: int):
 
 
 def run_training(extractor, train_loader):
-    ckpt_drive = "/content/last.pt"
+    ckpt_dir = repo_root / "weights"
     matcher = CorrespondenceMatcher2(extractor)
-    matcher.ckpt_dir = "/content"
+    matcher.ckpt_dir = str(ckpt_dir)
     matcher.exp_name = f"{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}Layers"
     matcher.resume = True
     matcher.save_every_epoch = 1
 
-    from fine_tuning.train import train_stage2
+    from src.fine_tuning.train import train_stage2
     matcher = train_stage2(
         matcher=matcher,
         train_loader=train_loader,
@@ -120,12 +120,11 @@ def build_test_loader(image_size: int):
 
 
 def run_evaluation(extractor, dataloader, image_size: int):
-    os.chdir("/content")
     matcher_eval = CorrespondenceMatcher(extractor)
     metrics_after = evaluate_model(
         matcher_eval,
         dataloader,
-        run_name="{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}LayersMetrics"
+        run_name=f"{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}LayersMetrics"
     )
     return metrics_after
 
@@ -143,7 +142,7 @@ def save_and_report(metrics_after, image_size: int):
 
     print(f"Results saved!")
     analyzer = ResultsAnalyzer(metrics_after)
-    analyzer.generate_report(save_dir='./results/{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}Layers')
+    analyzer.generate_report(save_dir=f'./results/{MODEL}with{N_EPOCHS}epochsImages{IMAGE_SIZE}with{N_UNFREEZE_LAYERS}Layers')
     summary_df = analyzer.create_summary_table(threshold=0.10)
     print(summary_df)
 

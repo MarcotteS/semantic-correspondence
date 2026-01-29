@@ -16,7 +16,7 @@ Performance is measured on the **SPair-71k** benchmark, using the **PCK (Percent
 - `src/` regroups all the classes and methods used in this project (extractors for each model, evaluation methods...)
 - `scripts/` contains Python scripts to run for evaluating the different feature extraction models
 - `backbones/` contains cloned model repositories (source code for DINOv3, etc.)
-- `weights/` stores all model checkpoint files (`.pth` files for DINOv2, DINOv3, SAM, and fine-tuned models)
+- `weights/` place all model checkpoint files here (`.pth` files for DINOv3, SAM, and fine-tuned models)
 - `notebooks/` contains different notebooks used to develop this project (with Colab)
 
 
