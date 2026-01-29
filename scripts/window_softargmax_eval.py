@@ -44,8 +44,8 @@ FINETUNED_DIR = repo_root / "fintunned"
 # Hyperparams
 WINDOW_SIZE = 5
 TEMPERATURE = 0.05
-BATCH_SIZE = 8
-NUM_WORKERS = 2
+BATCH_SIZE = 16
+NUM_WORKERS = 4
 CATEGORY = "all"
 
 # For grid search
@@ -56,12 +56,13 @@ SEARCH_MODEL = "dinov2"
 IMG_SIZES = {"dinov2": 518, "dinov3": 512, "sam": 512}
 
 FINETUNED_MODELS = {
-    #"DINOv2_1ep_2layers": ("dinov2", FINETUNED_DIR / "DinOV2with1epochsImages518with2Layers.pt"),
-    #"DINOv2_2ep_1layer": ("dinov2", FINETUNED_DIR / "DinOV2with2epochsImages518with1Layers.pt"),
-    #"DINOv3_3ep_1layer": ("dinov3", FINETUNED_DIR / "DINOv3with3epochsImages518with1Layers.pt"),
-    #"DINOv3_3ep_2layers": ("dinov3", FINETUNED_DIR / "DINO3with3epochsImages518with2Layers.pt"),
-    #"SAM_1ep_1layer": ("sam", FINETUNED_DIR / "SAMwith1epochsImages512with1Layers.pt"),
+    "DINOv2_1ep_2layers": ("dinov2", FINETUNED_DIR / "DinOV2with1epochsImages518with2Layers.pt"),
+    "DINOv2_2ep_1layer": ("dinov2", FINETUNED_DIR / "DinOV2with2epochsImages518with1Layers.pt"),
+    "DINOv3_3ep_1layer": ("dinov3", FINETUNED_DIR / "DINOv3with3epochsImages518with1Layers.pt"),
+    "DINOv3_3ep_2layers": ("dinov3", FINETUNED_DIR / "DINO3with3epochsImages518with2Layers.pt"),
+    "SAM_1ep_1layer": ("sam", FINETUNED_DIR / "SAMwith1epochsImages512with1Layers.pt"),
     "DINOv2_1ep_1layer": ("dinov2", FINETUNED_DIR / "DinOV2with1epochsImages518with1Layers.pt"),
+    "DINOv3_1ep_1layer": ("dinov3", FINETUNED_DIR / "DINOv3with1epochsImages518with1Layers.pt"),
 }
 
 
