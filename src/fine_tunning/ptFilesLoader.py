@@ -14,7 +14,7 @@ matcher = load_matcher_from_drive_ckpt(
 
 with extractor the excrator corresponding to the checkpoint, dinov2, dinov3 or Sam
 """
-from fine_tunning.CorrespondenceMatcher2 import CorrespondenceMatcher2
+from .CorrespondenceMatcher2 import CorrespondenceMatcher2
 import torch
 import os
 import torch.nn.functional as F
