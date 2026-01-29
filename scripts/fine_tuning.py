@@ -24,7 +24,7 @@ from src.evaluation import CorrespondenceEvaluator, evaluate_model
 from src.analyzer import ResultsAnalyzer
 from src.correspondence import CorrespondenceMatcher
 from src.models import DINOv2Extractor, DINOv3Extractor, SAMExtractor
-from src.dataset import SPairDataset
+from src.dataset import SPairDataset,collate_fn_correspondence
    
 
 
@@ -39,7 +39,6 @@ N_UNFREEZE_LAYERS = 1
 IMAGE_SIZE=518
 
 def create_extractor(model: str):
-    # contenu identique à ton code, juste emballé
     if model == "dinov2":
         extractor = DINOv2Extractor(model_name="dinov2_vitb14")
     elif model == "dinov3":
@@ -58,7 +57,6 @@ def create_extractor(model: str):
 
 
 def build_train_loader(image_size: int):
-    # contenu identique à ton code, juste emballé
     dataset = SPairDataset(
         datapath='.',
         split='trn',
@@ -130,10 +128,8 @@ def run_evaluation(extractor, dataloader, image_size: int):
 
 
 def save_and_report(metrics_after, image_size: int):
-    # contenu identique à ton code, juste emballé
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_name = "dinov2_vitb14"
-
     results_dict = {
         'metrics': metrics_after,
         'model': model_name,
