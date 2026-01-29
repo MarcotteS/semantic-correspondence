@@ -36,10 +36,10 @@ DINOV3_CHECKPOINT = None
 SAM_CHECKPOINT = None
 
 # Paths
-SAM_BASE_CKPT = repo_root / "backbones" / "segment-anything" / "checkpoints" / "sam_vit_b_01ec64.pth"
+SAM_BASE_CKPT = repo_root / "weights" / "sam_vit_b_01ec64.pth"
 DINOV3_REPO = str(repo_root / "backbones" / "dinov3")
-DINOV3_CKPT = str(repo_root / "backbones" / "dinov3" / "checkpoints" / "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
-FINETUNED_DIR = repo_root / "fintunned"
+DINOV3_CKPT = str(repo_root / "weights" / "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
+FINETUNED_DIR = repo_root / "weights"
 
 # Hyperparams
 WINDOW_SIZE = 5

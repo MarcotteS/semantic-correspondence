@@ -21,6 +21,7 @@ tqdm>=4.65.0
 
 # Hugging Face (for model loading)
 transformers>=4.30.0
+diffusers>=0.21.0
 
 # Jupyter/IPython (for notebooks)
 ipython>=8.0.0
