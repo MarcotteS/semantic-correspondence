@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 import time as pytime
 
-#this method is used for train the models, if the matcher name already exists and associeted with a .pt file
-#the fonction return the checkpoint or resume the training if all the epochs are not yet finished
-#the checkpoints containts information such as the wheights, loss history etc...
 """
+this method is used for train the models, if the matcher name already exists and associeted with a .pt file
+the fonction return the checkpoint or resume the training if all the epochs are not yet finished
+the checkpoints containts information such as the wheights, loss history etc...
 this method was overcomplexified to manage checkpoints but in the principle it is a simple torch auto backpropagation training,
 with at the beginning a step to unfreeze the n_last_blocks of the model.
 """
@@ -30,7 +30,7 @@ def train_stage2(
     use_amp=True,isSam=False
 ):
   
-    # --- live plot setup ---
+  
     plt.ion()
     fig, ax = plt.subplots()
     line, = ax.plot([], [])
@@ -39,7 +39,7 @@ def train_stage2(
     ax.set_title("Training loss (live)")
     last_plot_time = pytime.time()
 
-    # --- in-memory history (will be saved into checkpoint) ---
+   
     loss_history = []
     step_history = []
     
@@ -54,7 +54,7 @@ def train_stage2(
     def _save_ckpt(path, model, optimizer, scaler, epoch, step, loss_hist, step_hist):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         payload = {
-            "epoch": epoch,  # 0-based
+            "epoch": epoch,  
             "step": step,
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -104,7 +104,7 @@ def train_stage2(
     start_epoch_offset = 0
     global_step = 0
 
-    # ---- RESUME / EARLY EXIT ----
+
     if ckpt_file is not None and do_resume and os.path.exists(ckpt_file):
         last_epoch, global_step, loss_history, step_history = _load_ckpt(ckpt_file, model, optimizer, scaler)
         completed = last_epoch + 1

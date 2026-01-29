@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 """
-the methods of this files allow to build a comparison table of different metrics stored in json files.
+the methods of this file allow to build a comparison table of different metrics stored in json files.
 the .json files are available on drive as well as the .pt files: https://drive.google.com/drive/u/0/folders/130C33edJ_vrh-boOOQ2n9IdUUNqlIvVi
 when the drive folder is downloaded,these commands:
        
@@ -72,9 +72,6 @@ def _get_overall_pck(overall: dict, t: float) -> float:
 
 
 def build_metrics_comparison_table(metrics_paths: list[str]) -> pd.DataFrame:
-    """
-    Même comportement qu'avant: tu passes une liste de paths .json.
-    """
     THRESHOLDS = [0.05, 0.10, 0.15, 0.20]
     rows = []
 
@@ -94,9 +91,6 @@ def build_metrics_comparison_table(metrics_paths: list[str]) -> pd.DataFrame:
 
 
 def build_metrics_comparison_table_from_dir(metrics_dir: str) -> pd.DataFrame:
-    """
-    Nouveau: tu passes un dossier, ça prend tous les .json et fait le même tableau.
-    """
     metrics_dir = Path(metrics_dir)
     if not metrics_dir.is_dir():
         raise NotADirectoryError(f"Not a directory: {metrics_dir}")
