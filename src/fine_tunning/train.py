@@ -3,7 +3,7 @@ import os
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-
+from .CorrespondenceMatcher2 import correspondence_loss_ce
 #this method is used for train the models, if the matcher name already exists and associeted with a .pt file
 #the fonction return the checkpoint or resume the training if all the epochs are not yet finished
 #the checkpoints containts information such as the wheights, loss history etc...
