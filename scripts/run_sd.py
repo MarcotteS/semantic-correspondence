@@ -21,7 +21,7 @@ from src.correspondence import CorrespondenceMatcher
 from src.evaluation import evaluate_model
 from src.analyzer import ResultsAnalyzer
 
-WEIGHTS_PATH = "/weights/sd-1-5-weights"
+WEIGHTS_PATH = str(repo_root / "weights" / "sd-1-5-weights")
 
 
 def run_sd_baseline(

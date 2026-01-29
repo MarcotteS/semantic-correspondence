@@ -25,7 +25,7 @@ from src.analyzer import ResultsAnalyzer
 from scripts.run_sd import run_sd_baseline
 from scripts.run_baseline import dinov2_baseline
 
-WEIGHTS_PATH = "/weights/sd-1-5-weights"
+WEIGHTS_PATH = str(repo_root / "weights" / "sd-1-5-weights")
 
 def run_fusion(
     timestep: int,

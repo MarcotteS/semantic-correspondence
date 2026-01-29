@@ -38,6 +38,7 @@ tar -xzf SPair-71k.tar.gz
 - **DINOv2**: Downloaded automatically via torch hub
 - **DINOv3**: Download from [Meta AI](https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/) → `dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth`
 - **SAM**: Download from [segment-anything releases](https://github.com/facebookresearch/segment-anything#model-checkpoints) → `sam_vit_b_01ec64.pth`
+- **Stable Diffusion v1.5**: Download from [Hugging Face](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) → place in `weights/sd-1-5-weights/`
 
 **DINOv3 repository** (place in `backbones/`):
 ```bash
