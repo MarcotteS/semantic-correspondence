@@ -32,17 +32,17 @@ class CorrespondenceMatcher2:
         src_feats = F.normalize(src_feats, dim=-1)
         trg_feats = F.normalize(trg_feats, dim=-1)
 
-        valid_mask = (src_kps[..., 0] >= 0)  # [B,N]
+        valid_mask = (src_kps[..., 0] >= 0) 
 
         kps_grid = (src_kps / patch_size).long()
         grid_x = kps_grid[..., 0].clamp(0, w_p - 1)
         grid_y = kps_grid[..., 1].clamp(0, h_p - 1)
-        flat_indices = grid_y * w_p + grid_x  # [B,N]
+        flat_indices = grid_y * w_p + grid_x  
 
-        flat_indices_expanded = flat_indices.unsqueeze(-1).expand(-1, -1, D)  # [B,N,D]
-        src_kp_feats = torch.gather(src_feats, 1, flat_indices_expanded)      # [B,N,D]
+        flat_indices_expanded = flat_indices.unsqueeze(-1).expand(-1, -1, D)  
+        src_kp_feats = torch.gather(src_feats, 1, flat_indices_expanded)      
 
-        sim_matrix = torch.bmm(src_kp_feats, trg_feats.transpose(1, 2))       # [B,N,L]
+        sim_matrix = torch.bmm(src_kp_feats, trg_feats.transpose(1, 2))       
         return sim_matrix, (h_p, w_p), valid_mask
 
 
@@ -50,15 +50,17 @@ def kps_to_flat_indices(kps, patch_size, h_p, w_p):
     kps_grid = (kps / patch_size).long()
     grid_x = kps_grid[..., 0].clamp(0, w_p - 1)
     grid_y = kps_grid[..., 1].clamp(0, h_p - 1)
-    return grid_y * w_p + grid_x  # [B,N]
+    return grid_y * w_p + grid_x  
 
-
+"""
+this is the most IA part of the finetuning: we use a cross entropy loss to train the model to predict the right correspondance
+"""
 def correspondence_loss_ce(sim_matrix, trg_kps, patch_size, h_p, w_p, valid_src_mask, tau=0.07):
     B, N, L = sim_matrix.shape
     trg_kps = trg_kps.to(sim_matrix.device)
 
-    valid = valid_src_mask & (trg_kps[..., 0] >= 0)  # [B,N]
-    labels = kps_to_flat_indices(trg_kps, patch_size, h_p, w_p)  # [B,N]
+    valid = valid_src_mask & (trg_kps[..., 0] >= 0) 
+    labels = kps_to_flat_indices(trg_kps, patch_size, h_p, w_p) 
 
     logits = (sim_matrix / tau).reshape(B * N, L)
     labels = labels.reshape(B * N)

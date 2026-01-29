@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 def train_stage2(
     matcher,
     train_loader,
-    n_epochs=1,              #just this two hyperparameters were changed before the training
-    n_last_blocks=1,         #because the training was to long to experiment with too many hyperparameters
+    n_epochs=1,              #just this two hyperparameters were changed fort the training
+    n_last_blocks=1,         #because the training was to long to experiment with too many hyperparameters and collab limitations were quickly reached
     lr=2e-5,
     weight_decay=0.01,
     tau=0.07,

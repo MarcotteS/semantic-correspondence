@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 import pandas as pd
 
-
+#the methods of this files allow to build a comparison table of different metrics stored in json files.
+#the results are available at the bottom of the file.
+## the .json files are available on drive as well as the .pt files: https://drive.google.com/drive/u/0/folders/130C33edJ_vrh-boOOQ2n9IdUUNqlIvVi
 def load_metrics(json_path: str) -> dict:
     json_path = Path(json_path)
     if not json_path.exists():

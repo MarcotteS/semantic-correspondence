@@ -1,6 +1,19 @@
-# the .pt files are available on drive: https://drive.google.com/drive/u/0/folders/130C33edJ_vrh-boOOQ2n9IdUUNqlIvVi
-#because genretae the metrics is very long, some metrics are also available on the drive
-#it is redcomended to use these methods to get a matcher from a .pt file:
+"""
+this methods allows to load a finetuned model from a local .pt checkpoint
+the .pt files are available on drive: https://drive.google.com/drive/u/0/folders/130C33edJ_vrh-boOOQ2n9IdUUNqlIvVi
+they should be upload on collab, please wait that the upload is finished before calling this method.
+
+Example of usage:
+ckpt_path = "/content/DinOV2with1epochsImages518with1Layers.pt"
+
+
+matcher = load_matcher_from_drive_ckpt(
+    ckpt_path,
+    feature_extractor=extractor,
+)
+
+with extractor the excrator corresponding to the checkpoint, dinov2, dinov3 or Sam
+"""
 import torch
 import os
 import torch.nn.functional as F
@@ -14,21 +27,7 @@ def load_matcher_from_drive_ckpt(
     load_optimizer: bool = False,
     load_scaler: bool = False,
 ):
-    """
-    Charge un CorrespondenceMatcher2 depuis un checkpoint .pt stocké sur Drive.
-
-    Args:
-        ckpt_path (str): chemin vers le .pt (ex: /content/drive/MyDrive/exp/last.pt)
-        feature_extractor: extractor déjà construit (même arch que lors du training)
-        device (str | None): "cuda", "cpu" ou None (auto)
-        load_optimizer (bool): si True, retourne aussi l'optimizer
-        load_scaler (bool): si True, retourne aussi le GradScaler
-
-    Returns:
-        matcher
-        (+ optimizer, scaler si demandés)
-    """
-
+   
     # device
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
