@@ -1,6 +1,7 @@
 # Deep Learning
 torch>=2.0.0
 torchvision>=0.15.0
+torchmetrics>=1.8.2
 
 # Computer Vision & Image Processing
 Pillow>=9.0.0
