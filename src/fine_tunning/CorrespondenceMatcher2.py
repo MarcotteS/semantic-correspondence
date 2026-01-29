@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 #to compute the grads, we need something continous wich was not the case of the previous CorrespondenceMatcher
-class CorrespondenceMatcher2:
+class CorrespondenceMatcher2: #same code as Correspondence Matcher but return the similarity matrix
     def __init__(self, feature_extractor):
         self.extractor = feature_extractor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

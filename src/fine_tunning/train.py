@@ -4,9 +4,20 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from .CorrespondenceMatcher2 import correspondence_loss_ce
+import os
+import torch
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+from IPython.display import clear_output, display
+import time as pytime
+
 #this method is used for train the models, if the matcher name already exists and associeted with a .pt file
 #the fonction return the checkpoint or resume the training if all the epochs are not yet finished
 #the checkpoints containts information such as the wheights, loss history etc...
+"""
+this method was overcomplexified to manage checkpoints but in the principle it is a simple torch auto backpropagation training,
+with at the beginning a step to unfreeze the n_last_blocks of the model.
+"""
 def train_stage2(
     matcher,
     train_loader,
@@ -18,13 +29,7 @@ def train_stage2(
     max_batches_per_epoch=None,
     use_amp=True,isSam=False
 ):
-    import os
-    import torch
-    from tqdm import tqdm
-    import matplotlib.pyplot as plt
-    from IPython.display import clear_output, display
-    import time as pytime
-
+  
     # --- live plot setup ---
     plt.ion()
     fig, ax = plt.subplots()
@@ -37,7 +42,8 @@ def train_stage2(
     # --- in-memory history (will be saved into checkpoint) ---
     loss_history = []
     step_history = []
-
+    
+    #three methods to help with the checkpoints management
     def _ckpt_path():
         ckpt_dir = getattr(matcher, "ckpt_dir", None)
         if not ckpt_dir:
@@ -74,21 +80,15 @@ def train_stage2(
         loss_hist = ckpt.get("loss_history", [])
         step_hist = ckpt.get("step_history", [])
         return int(ckpt.get("epoch", 0)), int(ckpt.get("step", 0)), loss_hist, step_hist
-
-    # 0) Model
-    model = matcher.extractor.model
-
-    # 1) Unfreeze last layers
-    if isSam:
-        unfreeze_last_blocks_dino(model.image_encoder, n_last_blocks=n_last_blocks)
-    else:
-        unfreeze_last_blocks_dino(model, n_last_blocks=n_last_blocks)
     
-
-    # 2) Optimizer
+    #end of the three methods to help with the checkpoints management
+   
+    model = matcher.extractor.model
+    if isSam:
+        unfreeze_last_blocks(model.image_encoder, n_last_blocks=n_last_blocks)
+    else:
+        unfreeze_last_blocks(model, n_last_blocks=n_last_blocks)
     optimizer = make_optimizer(model, lr=lr, weight_decay=weight_decay)
-
-    # 3) Train mode
     model.train()
 
     scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and torch.cuda.is_available()))
@@ -129,7 +129,6 @@ def train_stage2(
         os.makedirs(os.path.dirname(ckpt_file), exist_ok=True)
         print(f"[ckpt] pas de checkpoint -> from scratch ({ckpt_file})")
 
-    # ---- TRAIN UNIQUEMENT LES EPOCHS MANQUANTES ----
     for epoch in range(start_epoch_offset, n_epochs):
         running = 0.0
         steps = 0
@@ -221,76 +220,20 @@ def plot_loss_steps(step_history, loss_history, smooth=50):
 
 
 
-def unfreeze_last_blocks_dino(model, n_last_blocks=1):
+def unfreeze_last_blocks(model, n_last_blocks=1):
     for p in model.parameters():
         p.requires_grad = False
 
     if not hasattr(model, "blocks"):
-        raise AttributeError("Le modèle n'a pas d'attribut .blocks (ViT).")
+        raise AttributeError("not found")
 
     for blk in model.blocks[-n_last_blocks:]:
         for p in blk.parameters():
-            p.requires_grad = True
-def unfreeze_last_blocks_vit(obj, n_last_blocks=1):
-    """
-    Accepte soit:
-    - un ViT direct (DINO): obj.blocks
-    - un SAM: obj.image_encoder.blocks
-    - un wrapper (matcher): cherche un sous-attribut qui contient le ViT/SAM
-    """
-
-    # 1) Si on nous donne directement DINO ViT
-    if hasattr(obj, "blocks"):
-        container = obj
-
-    # 2) Si on nous donne directement SAM
-    elif hasattr(obj, "image_encoder") and hasattr(obj.image_encoder, "blocks"):
-        container = obj.image_encoder
-
-    else:
-        # 3) Sinon: on suppose que c'est un wrapper (matcher) et on cherche un sous-module probable
-        candidates = [
-            "backbone", "model", "net", "encoder", "extractor", "feature_extractor",
-            "sam", "dino", "vit", "image_encoder"
-        ]
-
-        found = None
-        for name in candidates:
-            if hasattr(obj, name):
-                found = getattr(obj, name)
-                # DINO
-                if hasattr(found, "blocks"):
-                    container = found
-                    break
-                # SAM
-                if hasattr(found, "image_encoder") and hasattr(found.image_encoder, "blocks"):
-                    container = found.image_encoder
-                    break
-        else:
-            raise AttributeError(
-                "Je ne trouve pas les blocs ViT. "
-                "Ni obj.blocks (DINO), ni obj.image_encoder.blocks (SAM), "
-                "ni via les attributs usuels (model/encoder/extractor/etc.)."
-            )
-
-    # Freeze tout le container (ViT ou image_encoder)
-    for p in container.parameters():
-        p.requires_grad = False
-
-    # Unfreeze les derniers blocs
-    for blk in container.blocks[-n_last_blocks:]:
-        for p in blk.parameters():
-            p.requires_grad = True
-
-    # (Option utile SAM) garder pos_embed entraînable si présent
-    if hasattr(container, "pos_embed") and isinstance(container.pos_embed, torch.nn.Parameter):
-        container.pos_embed.requires_grad = True
-
-
+            p.requires_grad = True  #the key part for the training
 
 
 def make_optimizer(model, lr=2e-5, weight_decay=0.01):
     params = [p for p in model.parameters() if p.requires_grad]
     if len(params) == 0:
-        raise ValueError("Aucun paramètre entraînable.")
+        raise ValueError("no params trainable")
     return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)

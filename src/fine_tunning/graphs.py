@@ -3,9 +3,37 @@ import os
 from pathlib import Path
 import pandas as pd
 
-#the methods of this files allow to build a comparison table of different metrics stored in json files.
-#the results are available at the bottom of the file.
-## the .json files are available on drive as well as the .pt files: https://drive.google.com/drive/u/0/folders/130C33edJ_vrh-boOOQ2n9IdUUNqlIvVi
+"""
+the methods of this files allow to build a comparison table of different metrics stored in json files.
+the .json files are available on drive as well as the .pt files: https://drive.google.com/drive/u/0/folders/130C33edJ_vrh-boOOQ2n9IdUUNqlIvVi
+when the drive folder is downloaded,these commands:
+       
+             metrics_dir = r"C:\Users\guill\Downloads\finetunedmodels\FineTunedModels"
+             df_dir = build_metrics_comparison_table_from_dir(metrics_dir)
+             print(df_dir.to_string(index=False))
+            
+leads to this table:
+
+                                       name  overall_pck@0.05  overall_pck@0.10  overall_pck@0.15  overall_pck@0.20
+ 
+                         DINOv2StandardMetrics         36.923739         53.933068         63.384204         69.931392
+DinOV2with0.5epochsImages518with1LayersMetrics         59.409247         74.316185         80.516937         84.390001
+  DinOV2with1epochsImages518with1LayersMetrics         50.547958         64.004619         70.560864         74.803007
+  DinOV2with1epochsImages518with2Layersmetrics         45.837107         59.510008         66.564396         71.314872
+  DinOV2with2epochsImages518with1Layersmetrics         41.701386         54.616883         61.758446         66.807807
+ 
+                         DINOv3StandardMetrics         35.411195         52.766960         61.733539         67.575401
+  DINOv3with1epochsImages518with1LayersMetrics         57.802735         74.358074         81.052441         85.403270
+  DINOv3with3epochsImages518with1LayersMetrics         50.287565         66.650439         73.682185         78.463228
+  DINOv3with3epochsImages518with2Layersmetrics         43.744905         60.729327         68.499230         73.656145
+                
+                            SamStandardMetrics         13.369486         22.668916         30.074269         36.442578
+     SAMwith1epochsImages512with1LayersMetrics         29.691604         42.630876         51.106105         57.343085
+     SAMwith4epochsImages512with1Layersmetrics         16.378725         26.800109         34.186215         40.527353
+     
+wich can be consider as the result of the finetuning part
+
+"""
 def load_metrics(json_path: str) -> dict:
     json_path = Path(json_path)
     if not json_path.exists():
@@ -94,20 +122,5 @@ metrics_dir = r"C:\Users\guill\Downloads\finetunedmodels\FineTunedModels"
 df_dir = build_metrics_comparison_table_from_dir(metrics_dir)
 print(df_dir.to_string(index=False))
 
-"""                                    name  overall_pck@0.05  overall_pck@0.10  overall_pck@0.15  overall_pck@0.20
 
-                       DINOv2StandardMetrics         36.923739         53.933068         63.384204         69.931392
-DinOV2with1epochsImages518with1LayersMetrics         50.547958         64.004619         70.560864         74.803007
-DinOV2with1epochsImages518with2Layersmetrics         45.837107         59.510008         66.564396         71.314872
-DinOV2with2epochsImages518with1Layersmetrics         41.701386         54.616883         61.758446         66.807807
-                     
-                       DINOv3StandardMetrics         35.411195         52.766960         61.733539         67.575401
-DINOv3with1epochsImages518with1LayersMetrics         57.802735         74.358074         81.052441         85.403270
-DINOv3with3epochsImages518with1LayersMetrics         50.287565         66.650439         73.682185         78.463228
-DINOv3with3epochsImages518with2Layersmetrics         43.744905         60.729327         68.499230         73.656145
-              
-                          SamStandardMetrics         13.369486         22.668916         30.074269         36.442578
-   SAMwith1epochsImages512with1LayersMetrics         29.691604         42.630876         51.106105         57.343085
-   SAMwith4epochsImages512with1Layersmetrics         16.378725         26.800109         34.186215         40.527353
-"""
    
