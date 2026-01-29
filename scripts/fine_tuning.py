@@ -43,22 +43,20 @@ BATCH_SIZE = 16
 N_UNFREEZE_LAYERS = 1
 IMAGE_SIZE=518
 
+SAM_BASE_CKPT = repo_root / "weights" / "sam_vit_b_01ec64.pth"
+DINOV3_REPO = str(repo_root / "backbones" / "dinov3")
+DINOV3_CKPT = str(repo_root / "weights" / "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
+
 def create_extractor(model: str):
     if model == "dinov2":
-        extractor = DINOv2Extractor(model_name="dinov2_vitb14")
+        ext = DINOv2Extractor(model_name="dinov2_vitb14")
     elif model == "dinov3":
-        """
-        HTTP Error 403: Forbidden means that the link for dinoV3 is not available anymore
-        a new link can be get by agreeding the licence at: https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/
-        """
-        checkpoint_path = "https://dinov3.llamameta.net/dinov3_vitb16/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoiNHl0amRkcWl3MGtkenJieGVtb2g0ZHEwIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3Njk4NjAyNjl9fX1dfQ__&Signature=QmqFk8Q%7ED5qCVvGC7eN1%7EroKaNmURphM4e5yzI%7E3OBdRB4TD71ca7ZsiZ4y1EuBqSKvZVf69kLPMUpJyRY8lI9t51t0giT2vrkj8nOAiB%7EgQe9OnfBshsP-Cjv-ItdOXLE%7EYhuIA2z9dFuHK3n7q%7E3nxmseRLMgzOBTMrd%7E9XBpJm-kECM1bDBU%7Eif-i12wzgofWzhp-KWbn7LOQRttskFpnAqFvtHXqS5z9qyntj0DWrx1cu8bvFxLNsKO%7E6Do8lXzNSqOfBAb-6LrnVHjBMa8kMieBGIYlqpgRzYMyJFip2OK5KKQ8CaQ8sY2rSfbkeoh4v7RhhLRuZ852yYn32w__&Key-Pair-Id=K15QRJLYKIFSLZ&Download-Request-ID=1201704068775191"
-        extractor = DINOv3Extractor(repo_dir='dinov3', weights=checkpoint_path)
+        ext = DINOv3Extractor(model_name="dinov3_vitb16", repo_dir=DINOV3_REPO, weights=DINOV3_CKPT)
     elif model == "sam":
-        checkpoint_path = "sam_vit_b_01ec64.pth"
-        extractor = SAMExtractor(model_type="vit_b", checkpoint_path=checkpoint_path)
+        ext = SAMExtractor(model_type="vit_b", checkpoint_path=str(SAM_BASE_CKPT), image_size=IMAGE_SIZE)
     else:
         raise ValueError("Unknown model")
-    return extractor
+    return ext
 
 
 def build_train_loader(image_size: int):
