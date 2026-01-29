@@ -12,11 +12,13 @@ Implementation of semantic correspondence methods using different visual foundat
 Performance is measured on the **SPair-71k** benchmark, using the **PCK (Percentage of Correct Keypoints)** metric.
 
 ### Repo Structure
-- `data/` indicates where to store the downloaded data from SPair-71k (also downloaded in the notebooks)
+- `data/` where to store the downloaded data from SPair-71k (also downloaded in the notebooks)
 - `src/` regroups all the classes and methods used in this project (extractors for each model, evaluation methods...)
-- `scripts/` contains mainly python scripts to run for evaluating the different feature extraction models
-- `weights/` indicates where to store the weights of the different models used
+- `scripts/` contains Python scripts to run for evaluating the different feature extraction models
+- `backbones/` contains cloned model repositories (source code for DINOv3, etc.)
+- `weights/` stores all model checkpoint files (`.pth` files for DINOv2, DINOv3, SAM, and fine-tuned models)
 - `notebooks/` contains different notebooks used to develop this project (with Colab)
+
 
 ### Requirements
 

@@ -30,11 +30,6 @@ RUN_SAM = False
 RUN_ALL_FINETUNED = True
 RUN_HYPERPARAM_SEARCH = False
 
-# Checkpoints (None = baseline)
-DINOV2_CHECKPOINT = None
-DINOV3_CHECKPOINT = None
-SAM_CHECKPOINT = None
-
 # Paths
 SAM_BASE_CKPT = repo_root / "weights" / "sam_vit_b_01ec64.pth"
 DINOV3_REPO = str(repo_root / "backbones" / "dinov3")
