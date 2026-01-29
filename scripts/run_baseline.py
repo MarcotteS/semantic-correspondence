@@ -29,6 +29,10 @@ from src.correspondence import CorrespondenceMatcher
 from src.evaluation import evaluate_model
 from src.analyzer import ResultsAnalyzer
 
+SAM_BASE_CKPT = str(repo_root / "weights" / "sam_vit_b_01ec64.pth")
+DINOV3_REPO = str(repo_root / "backbones" / "dinov3")
+DINOV3_CKPT = str(repo_root / "weights" / "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
+
 
 def run_baseline(
     extractor,
@@ -111,10 +115,9 @@ def dinov2_baseline():
 
 def dinov3_baseline():
     """Baseline for DINOv3"""
-    checkpoint_path = "https://dinov3.llamameta.net/dinov3_vitb16/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoiNmt0Y2lrdHZodmt4dG92dm41ajZrNmdsIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3Njc3NDM4ODZ9fX1dfQ__&Signature=Oo15SCsLwsN9zW-rhSAzIkZGaRPl3VBGnzOjgpGgs8zJC5RsjAPjaA2emXitvCNWCUDkBkxO-wrYyhLVjR5LB9euV7S4dPRunVY1W1tIqH7hbfgQJtNJis3hdz0SDJe4YRQc6BU3GEKxal5m7d69lIBcz3BPyTE9FWkgcbKgOLESrZuY32zmZFhQrpr7TaQQbUjBY9XWb2ais8B5FjgrcuEOj%7E5ECznFTRSsfc57Ai1WtVjt5UD-jSJPahxsPj2EMbe3TYAzkxzhXIjv7pT75QBcmgk2lNuXC3YsijBhNBn%7EAbaC3H5c9mDaE4xiGQ8II-OM-geu3QE2P1rLXLfvJQ__&Key-Pair-Id=K15QRJLYKIFSLZ&Download-Request-ID=1644049136628051"
     image_size = 512  # Images must be multiples of 16 for DINOv3
     
-    extractor = DINOv3Extractor(repo_dir='dinov3', weights=checkpoint_path)
+    extractor = DINOv3Extractor(repo_dir=DINOV3_REPO, weights=DINOV3_CKPT)
     
     return run_baseline(
         extractor=extractor,
@@ -127,9 +130,8 @@ def dinov3_baseline():
 def sam_baseline():
     """Baseline for SAM"""
     image_size = 512
-    checkpoint_path = "sam_vit_b_01ec64.pth"
     
-    extractor = SAMExtractor(model_type="vit_b", checkpoint_path=checkpoint_path)
+    extractor = SAMExtractor(model_type="vit_b", checkpoint_path=SAM_BASE_CKPT)
     
     return run_baseline(
         extractor=extractor,
