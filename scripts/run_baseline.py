@@ -135,7 +135,7 @@ def sam_baseline():
         extractor=extractor,
         model_name="sam_vit_b",
         image_size=image_size,
-        batch_size=1  # SAM uses batch_size=1
+        batch_size=8  # SAM uses batch_size=8
     )
 
 
